@@ -221,6 +221,23 @@ textarea:focus,select:focus{outline:none;border-color:var(--blue);background:#ff
 .bill-table td, .bill-table th{padding:9px 10px;}
 .bill-total-row td{font-weight:700;font-size:14px;border-top:2px solid var(--line);}
 
+/* Center popup modal (Appointments / Make Payment) — distinct from the
+   right-side patient drawer used elsewhere */
+.popup-overlay{position:fixed;inset:0;background:rgba(15,20,40,.42);z-index:150;display:flex;align-items:center;justify-content:center;padding:20px;}
+.popup-box{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px;box-shadow:0 20px 60px rgba(15,27,61,.25);max-height:80vh;overflow-y:auto;}
+.popup-box .popup-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+.popup-box .popup-head h3{font-size:16px;margin-bottom:2px;}
+.popup-box .popup-head .sub{font-size:12.5px;color:var(--muted);}
+.popup-close{background:var(--surface);border:1px solid var(--line);border-radius:50%;width:28px;height:28px;font-size:13px;color:var(--muted);flex-shrink:0;}
+.popup-appt-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;}
+.popup-appt-row:last-child{border-bottom:none;}
+.popup-appt-row .d{font-weight:600;}
+.popup-appt-row .doc{color:var(--muted);font-size:12px;margin-top:2px;}
+.popup-bill-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;}
+.popup-bill-row:last-child{border-bottom:none;}
+.popup-total-row{display:flex;justify-content:space-between;font-weight:700;font-size:14.5px;padding-top:12px;margin-top:4px;border-top:2px solid var(--line);}
+.popup-empty{text-align:center;padding:20px 10px;color:var(--muted);font-size:13px;}
+
 /* Patient detail drawer */
 .overlay{position:fixed;inset:0;background:rgba(15,20,40,.42);z-index:100;display:none;}
 .overlay.open{display:block;}
