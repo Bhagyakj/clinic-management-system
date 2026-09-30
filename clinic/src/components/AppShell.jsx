@@ -11,9 +11,14 @@ import Payments from './Payments.jsx';
 import Admissions from './Admissions.jsx';
 import PatientDrawer from './PatientDrawer.jsx';
 import Navbar from './Navbar.jsx';
+import CollectPayment from './CollectPayment.jsx';
+import Users from './Users.jsx';
+import Medicines from './Medicines.jsx';
+import Procedures from './Procedures.jsx';
+import Rooms from './Rooms.jsx';
 
 export default function AppShell() {
-  const { role, currentRole, activeNav, navigate, goRoleSelect } = useApp();
+  const { role, currentRole, activeNav, navigate, logout } = useApp();
   const navItems = NAV[role] || [];
 
   React.useEffect(() => {
@@ -36,8 +41,8 @@ export default function AppShell() {
         ))}
         <div className="sidebar-bottom">
           <div className="nav-sep" />
-          <div className="nav-item logout-item" onClick={goRoleSelect}>
-            <span className="ic">↩️</span>Switch role
+          <div className="nav-item logout-item" onClick={logout}>
+            <span className="ic">↩️</span>Log out
           </div>
         </div>
       </div>
@@ -48,6 +53,7 @@ export default function AppShell() {
         </div>
       </div>
       <PatientDrawer />
+      <CollectPayment />
     </div>
   );
 }
@@ -61,6 +67,10 @@ function PageRouter({ navKey }) {
     case 'billing': return <Billing />;
     case 'payments': return <Payments />;
     case 'admissions': return <Admissions />;
+    case 'users': return <Users />;
+    case 'medicines': return <Medicines />;
+    case 'procedures': return <Procedures />;
+    case 'rooms': return <Rooms />;
     case 'dashboard': return <Dashboard />;
     default:
       return (

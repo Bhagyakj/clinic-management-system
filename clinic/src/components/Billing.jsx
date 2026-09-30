@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext.jsx';
 
-const ROOMS = ['Room 101', 'Room 102', 'Room 103'];
-
 export default function Billing() {
-  const { patients, navigate, issueBill } = useApp();
+  const { patients, rooms, navigate, issueBill } = useApp();
+  const availableRooms = rooms.filter((r) => r.status === 'Available');
   const [patientId, setPatientId] = useState(patients[0]?.id);
   const [admissionYes, setAdmissionYes] = useState(false); // default: No
   const [admissionDays, setAdmissionDays] = useState(1);
-  const [room, setRoom] = useState(ROOMS[0]);
+  const [room, setRoom] = useState(availableRooms[0]?.name || '');
 
   const handleIssue = () => {
     issueBill({
@@ -67,7 +66,8 @@ export default function Billing() {
             <label>Room (if admitted)</label>
             <select disabled={!admissionYes} value={room} onChange={(e) => setRoom(e.target.value)}>
               {!admissionYes && <option>— Not applicable —</option>}
-              {ROOMS.map((r) => <option key={r}>{r}</option>)}
+              {availableRooms.length === 0 && admissionYes && <option>No rooms currently available</option>}
+              {availableRooms.map((r) => <option key={r.id}>{r.name}</option>)}
             </select>
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>

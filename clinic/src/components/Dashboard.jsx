@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../AppContext.jsx';
-import { APPTS, pendingBillsCount, patientPayStatus } from '../data.js';
+import { pendingBillsCount, patientPayStatus, billBalance } from '../data.js';
 import { StatCard, QuickAction, NameLink, Badge, PayBadge, Donut } from './Shared.jsx';
 
 export default function Dashboard() {
@@ -17,23 +17,24 @@ export default function Dashboard() {
 }
 
 function ManagerBody() {
-  const { patients, bills, navigate } = useApp();
+  const { patients, bills, rooms } = useApp();
   const pending = pendingBillsCount(bills);
+  const occupiedRooms = rooms.filter((r) => r.status === 'Occupied').length;
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Total Patients" value="124" delta="+12% from last week" />
+        <StatCard label="Total Patients" value={patients.length} delta="+12% from last week" />
         <StatCard label="Today's Appointments" value="28" delta="+5% from yesterday" />
         <StatCard label="Pending Payments" value={pending} delta={pending > 0 ? `${pending} bill(s) awaiting payment` : 'All bills cleared'} neg />
-        <StatCard label="Occupied Rooms" value="8" delta="+2 from last week" />
+        <StatCard label="Occupied Rooms" value={occupiedRooms} delta={`of ${rooms.length} total rooms`} />
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Quick actions</h3>
         <div className="qa-grid">
-          <QuickAction icon="👤" label="Add User" />
-          <QuickAction icon="💊" label="Add Medicine" />
-          <QuickAction icon="🧾" label="Add Procedure" />
-          <QuickAction icon="🚪" label="Manage Rooms" />
+          <QuickAction icon="👤" label="Add User" nav="users" />
+          <QuickAction icon="💊" label="Add Medicine" nav="medicines" />
+          <QuickAction icon="🧾" label="Add Procedure" nav="procedures" />
+          <QuickAction icon="🚪" label="Manage Rooms" nav="rooms" />
         </div>
       </div>
       <div className="grid-2">
@@ -56,7 +57,7 @@ function ManagerBody() {
         </div>
         <div className="card">
           <h3>Room status</h3>
-          <Donut />
+          <Donut rooms={rooms} />
         </div>
       </div>
     </>
@@ -64,22 +65,22 @@ function ManagerBody() {
 }
 
 function FosBody() {
-  const { patients, bills, navigate, markBillPaid } = useApp();
+  const { patients, bills, appointments, navigate, openPayment } = useApp();
   const pending = bills.filter((b) => b.status === 'Pending');
   const pendingCount = pending.length;
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Total Patients" value="56" delta="+8% from last week" />
-        <StatCard label="Today's Appointments" value="18" delta="+3% from yesterday" />
+        <StatCard label="Total Patients" value={patients.length} delta="+8% from last week" />
+        <StatCard label="Today's Appointments" value={appointments.length} delta="+3% from yesterday" />
         <StatCard label="Pending Payments" value={pendingCount} delta={pendingCount > 0 ? `${pendingCount} patient bill(s) not yet cleared` : 'All patients cleared ✓'} neg={pendingCount > 0} />
         <StatCard label="Admissions" value={patients.filter((p) => p.admitted).length} delta="currently admitted" />
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Quick actions</h3>
         <div className="qa-grid">
-          <QuickAction icon="🧑‍🤝‍🧑" label="Register Patient" />
-          <QuickAction icon="📅" label="Book Appointment" />
+          <QuickAction icon="🧑‍🤝‍🧑" label="Register Patient" nav="patients" />
+          <QuickAction icon="📅" label="Book Appointment" nav="appointments" />
           <QuickAction icon="💳" label="Make Payment" nav="payments" />
           <QuickAction icon="🛏️" label="New Admission" nav="admissions" />
         </div>
@@ -90,8 +91,8 @@ function FosBody() {
           <table>
             <tbody>
               <tr><th>Time</th><th>Patient</th><th>Doctor</th><th>Status</th></tr>
-              {APPTS.map((a) => (
-                <tr key={a.time}>
+              {appointments.map((a) => (
+                <tr key={a.id}>
                   <td>{a.time}</td>
                   <td><NameLink id={a.patientId}>{a.patient}</NameLink></td>
                   <td>{a.doctor}</td>
@@ -117,8 +118,8 @@ function FosBody() {
                     <tr key={b.id}>
                       <td><NameLink id={p.id}>{p.name}</NameLink></td>
                       <td>{b.desc}</td>
-                      <td>₹{b.amount}</td>
-                      <td><button className="btn btn-sm btn-accent" onClick={() => markBillPaid(b.id)}>Mark paid</button></td>
+                      <td>₹{billBalance(b)}</td>
+                      <td><button className="btn btn-sm btn-accent" onClick={() => openPayment(b.patientId)}>Collect</button></td>
                     </tr>
                   );
                 })}
@@ -133,12 +134,12 @@ function FosBody() {
 }
 
 function JdocBody() {
-  const { navigate } = useApp();
+  const { navigate, appointments } = useApp();
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Today's Appointments" value="12" delta="+2 from yesterday" />
-        <StatCard label="Waiting Patients" value="4" delta="-1 from yesterday" />
+        <StatCard label="Today's Appointments" value={appointments.length} delta="+2 from yesterday" />
+        <StatCard label="Waiting Patients" value={appointments.filter((a) => a.status === 'waiting').length} delta="-1 from yesterday" />
         <StatCard label="Completed Consultations" value="8" delta="+3 from yesterday" />
       </div>
       <div className="grid-2">
@@ -147,8 +148,8 @@ function JdocBody() {
           <table>
             <tbody>
               <tr><th>Time</th><th>Patient</th><th>Type</th><th>Status</th><th></th></tr>
-              {APPTS.map((a) => (
-                <tr key={a.time}>
+              {appointments.map((a) => (
+                <tr key={a.id}>
                   <td>{a.time}</td>
                   <td><NameLink id={a.patientId}>{a.patient}</NameLink></td>
                   <td>OP</td>

@@ -3,7 +3,7 @@ import { useApp } from '../AppContext.jsx';
 import { PAGE_TITLES } from '../data.js';
 
 export default function Navbar() {
-  const { currentRole, activeNav } = useApp();
+  const { currentRole, activeNav, userName } = useApp();
   const title = PAGE_TITLES[activeNav] || 'Dashboard';
 
   return (
@@ -15,7 +15,7 @@ export default function Navbar() {
         <div className="profile-chip">
           <div className="avatar" style={{ background: currentRole.accent }}>{currentRole.icon}</div>
           <div>
-            <div className="name">Dr. John</div>
+            <div className="name">{userName}</div>
             <div className="role">{currentRole.label}</div>
           </div>
         </div>

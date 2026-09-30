@@ -49,9 +49,12 @@ export function Toast() {
   return <div className={`toast ${toastVisible ? 'show' : ''}`}>{toastMsg}</div>;
 }
 
-export function Donut() {
-  const total = 12, avail = 4, occ = 8;
-  const pctOcc = (occ / total) * 100;
+export function Donut({ rooms }) {
+  const total = rooms ? rooms.length : 12;
+  const avail = rooms ? rooms.filter((r) => r.status === 'Available').length : 4;
+  const occ = rooms ? rooms.filter((r) => r.status === 'Occupied').length : 8;
+  const closed = rooms ? rooms.filter((r) => r.status === 'Closed').length : 0;
+  const pctOcc = total > 0 ? (occ / total) * 100 : 0;
   return (
     <div className="donut-wrap">
       <svg width="130" height="130" viewBox="0 0 36 36">
@@ -67,7 +70,7 @@ export function Donut() {
       <div>
         <div className="legend-item"><span className="legend-dot" style={{ background: '#E4E9F2', border: '2px solid #189A5B' }} />Available — {avail}</div>
         <div className="legend-item"><span className="legend-dot" style={{ background: '#2563EB' }} />Occupied — {occ}</div>
-        <div className="legend-item"><span className="legend-dot" style={{ background: '#D9435E' }} />Closed — 0</div>
+        <div className="legend-item"><span className="legend-dot" style={{ background: '#D9435E' }} />Closed — {closed}</div>
       </div>
     </div>
   );

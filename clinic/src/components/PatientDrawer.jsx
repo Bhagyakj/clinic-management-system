@@ -1,10 +1,10 @@
 import React from 'react';
 import { useApp } from '../AppContext.jsx';
-import { billsForPatient, patientPayStatus } from '../data.js';
+import { billsForPatient, patientPayStatus, billBalance } from '../data.js';
 import { PayBadge } from './Shared.jsx';
 
 export default function PatientDrawer() {
-  const { patients, bills, drawerPatientId, closeDrawer, navigate, markBillPaid } = useApp();
+  const { patients, bills, drawerPatientId, closeDrawer, navigate, openPayment } = useApp();
   const open = Boolean(drawerPatientId);
   const p = patients.find((x) => x.id === drawerPatientId);
 
@@ -45,9 +45,9 @@ export default function PatientDrawer() {
                       {billsForPatient(bills, p.id).map((b) => (
                         <tr key={b.id}>
                           <td>{b.id} — {b.desc}</td>
-                          <td>₹{b.amount}</td>
+                          <td>₹{billBalance(b)}{b.paid > 0 && b.status !== 'Paid' ? ` of ₹${b.amount}` : ''}</td>
                           <td><PayBadge status={b.status} /></td>
-                          <td>{b.status === 'Pending' && <button className="btn btn-sm btn-accent" onClick={() => markBillPaid(b.id)}>Mark paid</button>}</td>
+                          <td>{b.status === 'Pending' && <button className="btn btn-sm btn-accent" onClick={() => openPayment(b.patientId)}>Collect</button>}</td>
                         </tr>
                       ))}
                     </tbody>

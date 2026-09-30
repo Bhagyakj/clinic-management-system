@@ -1,8 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../AppContext.jsx';
 
 export default function Login() {
-  const { goRoleSelect, showToast } = useApp();
+  const { login, goToRegister, authLoading } = useApp();
+  const [employeeId, setEmployeeId] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!employeeId.trim() || !password) {
+      setError('Enter your Employee ID and password.');
+      return;
+    }
+    const result = await login(employeeId.trim(), password);
+    if (!result.ok) setError(result.error);
+  };
+
   return (
     <div className="login-wrap">
       <div className="login-art">
@@ -13,18 +29,42 @@ export default function Login() {
         </div>
       </div>
       <div className="login-form-side">
-        <div className="login-card">
+        <form className="login-card" onSubmit={handleLogin}>
           <div className="logo-row"><div className="mark">➕</div><span>MediFlow Clinic</span></div>
           <h1>Welcome back</h1>
-          <p className="sub">Log in with your Hospital ID and OTP.</p>
-          <div className="field"><label>Hospital ID</label><input type="text" defaultValue="HSP-2291" /></div>
-          <div className="otp-row">
-            <div className="field"><label>OTP</label><input type="text" placeholder="Enter 6-digit OTP" maxLength={6} /></div>
+          <p className="sub">Log in with your Employee ID and password. You'll go straight to your own dashboard.</p>
+
+          <div className="field">
+            <label>Employee ID</label>
+            <input
+              type="text" value={employeeId} autoComplete="username"
+              onChange={(e) => { setEmployeeId(e.target.value); setError(''); }}
+              placeholder="e.g. HSP-2001"
+            />
           </div>
-          <button className="link-btn" style={{ margin: '8px 0 4px' }} onClick={() => showToast('OTP sent to registered mobile number')}>Get OTP</button>
-          <button className="btn-primary" onClick={goRoleSelect}>Log in</button>
-          <p className="hint">Trouble logging in? Contact your clinic administrator.</p>
-        </div>
+
+          <div className="field">
+            <label>Password</label>
+            <div className="pw-row">
+              <input
+                type={showPw ? 'text' : 'password'} value={password} autoComplete="current-password"
+                onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                placeholder="Enter your password"
+              />
+              <button type="button" className="pw-toggle" onClick={() => setShowPw((v) => !v)}>{showPw ? 'Hide' : 'Show'}</button>
+            </div>
+          </div>
+
+          {error && <div className="login-error">{error}</div>}
+
+          <button type="submit" className="btn-primary" disabled={authLoading}>
+            {authLoading ? 'Logging in…' : 'Log in'}
+          </button>
+
+          <p className="hint">
+            New here? <button type="button" className="link-btn" onClick={goToRegister}>Create an account</button>
+          </p>
+        </form>
       </div>
     </div>
   );

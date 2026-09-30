@@ -1,22 +1,34 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext.jsx';
-import { patientPayStatus } from '../data.js';
+import { patientPayStatus, pendingBillsForPatient, billBalance, appointmentCharges } from '../data.js';
 import { NameLink, PayBadge, Badge } from './Shared.jsx';
 
-function pendingBillsForPatient(bills, patientId) {
-  return bills.filter((b) => b.patientId === patientId && b.status === 'Pending');
-}
-export default function Patients() {
-  const { role, patients, bills, showToast, openPatient, navigate } = useApp();
-  const [popup, setPopup] = useState(null); // { type: 'appointments' | 'payment', patientId } | null
+const TIME_SLOTS = ['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM'];
+const today = () => new Date().toISOString().slice(0, 10);
 
+// Appointment history = every appointment booked for this patient + any older history stored on the patient
+function appointmentsForPatient(appointments, patient) {
+  const fromBookings = (appointments || [])
+    .filter((a) => a.patientId === patient.id)
+    .map((a) => ({ date: a.date, time: a.time, doctor: a.doctor, status: a.status }));
+  const all = [...fromBookings, ...(patient.appointmentHistory || [])];
+  const seen = new Set();
+  return all
+    .filter((a) => {
+      const key = `${a.date}|${a.time}|${a.doctor}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+export default function Patients() {
+  const { role, patients, bills, appointments, users, showToast, openPatient, openPayment, navigate, bookAppointment } = useApp();
+  const [popup, setPopup] = useState(null); // { type: 'appointments' | 'book' | 'payment', patientId }
   const isFrontDesk = role === 'manager' || role === 'fos';
   const closePopup = () => setPopup(null);
-
-  const goToBilling = () => {
-    closePopup();
-    navigate('payments');
-  };
+  const active = popup ? patients.find((x) => x.id === popup.patientId) : null;
 
   return (
     <>
@@ -43,10 +55,11 @@ export default function Patients() {
                 <td><PayBadge status={patientPayStatus(bills, p.id)} /></td>
                 <td>
                   {isFrontDesk ? (
-                    <>
-                      <button className="btn btn-sm" onClick={() => setPopup({ type: 'appointments', patientId: p.id })}>Appointments</button>{' '}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button className="btn btn-sm" onClick={() => setPopup({ type: 'appointments', patientId: p.id })}>Appointments</button>
+                      <button className="btn btn-sm" onClick={() => setPopup({ type: 'book', patientId: p.id })}>Book appointment</button>
                       <button className="btn btn-sm btn-accent" onClick={() => setPopup({ type: 'payment', patientId: p.id })}>Make Payment</button>
-                    </>
+                    </div>
                   ) : (
                     <>
                       <button className="btn btn-sm" onClick={() => openPatient(p.id)}>View</button>{' '}
@@ -60,86 +73,128 @@ export default function Patients() {
         </table>
       </div>
 
-      {popup && (
-        <PopupModal
-          popup={popup}
-          patients={patients}
-          bills={bills}
-          onClose={closePopup}
-          onGoToBilling={goToBilling}
-        />
+      {popup && active && (
+        <div className="popup-overlay" onClick={closePopup}>
+          <div className="popup-box" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            {popup.type === 'appointments' && (
+              <HistoryPopup p={active} history={appointmentsForPatient(appointments, active)} onClose={closePopup} />
+            )}
+            {popup.type === 'payment' && (
+              <DuePopup
+                p={active} bills={bills} onClose={closePopup}
+                onPay={() => { closePopup(); navigate('payments'); openPayment(active.id); }}
+              />
+            )}
+            {popup.type === 'book' && (
+              <BookPopup
+                p={active} bills={bills} appointments={appointments} users={users}
+                onClose={closePopup}
+                onBook={(form) => { bookAppointment(form); closePopup(); }}
+              />
+            )}
+          </div>
+        </div>
       )}
     </>
   );
 }
 
-function PopupModal({ popup, patients, bills, onClose, onGoToBilling }) {
-  const p = patients.find((x) => x.id === popup.patientId);
-  if (!p) return null;
-
+function Head({ title, p, onClose }) {
   return (
-    <div className="popup-overlay" onClick={onClose}>
-      <div className="popup-box" onClick={(e) => e.stopPropagation()}>
-        {popup.type === 'appointments' ? (
-          <>
-            <div className="popup-head">
-              <div>
-                <h3>Appointment history</h3>
-                <div className="sub">{p.name} • {p.id}</div>
-              </div>
-              <button className="popup-close" onClick={onClose}>✕</button>
-            </div>
-            {p.appointmentHistory && p.appointmentHistory.length > 0 ? (
-              p.appointmentHistory.map((a, i) => (
-                <div className="popup-appt-row" key={i}>
-                  <div>
-                    <div className="d">{a.date} • {a.time}</div>
-                    <div className="doc">{a.doctor}</div>
-                  </div>
-                  <Badge status={a.status} />
-                </div>
-              ))
-            ) : (
-              <div className="popup-empty">No past appointments on record.</div>
-            )}
-          </>
-        ) : (
-          <PaymentPopup p={p} bills={bills} onClose={onClose} onGoToBilling={onGoToBilling} />
-        )}
-      </div>
+    <div className="popup-head">
+      <div><h3>{title}</h3><div className="sub">{p.name} • {p.id}</div></div>
+      <button className="popup-close" onClick={onClose}>✕</button>
     </div>
   );
 }
 
-function PaymentPopup({ p, bills, onClose, onGoToBilling }) {
-  const pending = pendingBillsForPatient(bills, p.id);
-  const total = pending.reduce((sum, b) => sum + b.amount, 0);
-
+function HistoryPopup({ p, history, onClose }) {
   return (
     <>
-      <div className="popup-head">
-        <div>
-          <h3>Amount due</h3>
-          <div className="sub">{p.name} • {p.id}</div>
+      <Head title="Appointment history" p={p} onClose={onClose} />
+      {history.length > 0 ? history.map((a, i) => (
+        <div className="popup-appt-row" key={i}>
+          <div>
+            <div className="d">{a.date || 'Date not recorded'}{a.time ? ` • ${a.time}` : ''}</div>
+            <div className="doc">{a.doctor}</div>
+          </div>
+          <Badge status={a.status} />
         </div>
-        <button className="popup-close" onClick={onClose}>✕</button>
-      </div>
+      )) : <div className="popup-empty">No appointments on record for this patient yet.</div>}
+    </>
+  );
+}
+
+function DuePopup({ p, bills, onClose, onPay }) {
+  const pending = pendingBillsForPatient(bills, p.id);
+  const total = pending.reduce((sum, b) => sum + billBalance(b), 0);
+  return (
+    <>
+      <Head title="Amount due" p={p} onClose={onClose} />
       {pending.length === 0 ? (
         <div className="popup-empty">✅ Nothing pending — this patient is fully cleared.</div>
       ) : (
         <>
           {pending.map((b) => (
             <div className="popup-bill-row" key={b.id}>
-              <span>{b.desc}</span>
-              <span>₹{b.amount}</span>
+              <span>{b.purpose || b.desc}<span style={{ color: 'var(--muted)', fontSize: 12 }}> — {b.desc}</span></span>
+              <span>₹{billBalance(b)}</span>
             </div>
           ))}
           <div className="popup-total-row"><span>Total due</span><span>₹{total}</span></div>
-          <button className="btn btn-accent" style={{ width: '100%', marginTop: 16 }} onClick={onGoToBilling}>
-            Make payment →
-          </button>
+          <button className="btn btn-accent" style={{ width: '100%', marginTop: 16 }} onClick={onPay}>Make payment →</button>
         </>
       )}
+    </>
+  );
+}
+
+function BookPopup({ p, bills, appointments, users, onClose, onBook }) {
+  const doctors = users.filter((u) => /doctor/i.test(u.designation) && u.status !== 'Archived');
+  const [doctor, setDoctor] = useState(doctors[0]?.name || '');
+  const [date, setDate] = useState(today());
+  const [time, setTime] = useState(TIME_SLOTS[0]);
+  const { charges, note } = appointmentCharges(p, appointments, bills, date);
+  const total = charges.reduce((sum, c) => sum + c.amount, 0);
+
+  return (
+    <>
+      <Head title="Book appointment" p={p} onClose={onClose} />
+      <div className="form-grid">
+        <div className="field">
+          <label>Doctor</label>
+          <select value={doctor} onChange={(e) => setDoctor(e.target.value)}>
+            {doctors.map((d) => <option key={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Time</label>
+          <select value={time} onChange={(e) => setTime(e.target.value)}>
+            {TIME_SLOTS.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="field full">
+          <label>Date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+      </div>
+      <div className="charge-box">
+        <div className="note">{note}</div>
+        {charges.length === 0 ? (
+          <div style={{ fontWeight: 600, color: 'var(--good)' }}>No charge to collect for this appointment.</div>
+        ) : (
+          <>
+            {charges.map((c) => <div className="row" key={c.purpose}><span>{c.desc}</span><span>₹{c.amount}</span></div>)}
+            <div className="total"><span>To collect</span><span>₹{total}</span></div>
+          </>
+        )}
+      </div>
+      <button
+        className="btn btn-accent" style={{ width: '100%' }} disabled={!doctor || !date}
+        onClick={() => onBook({ patientId: p.id, doctor, date, time, charges })}
+      >
+        Book appointment{total > 0 ? ` and add ₹${total} to payments` : ''}
+      </button>
     </>
   );
 }
