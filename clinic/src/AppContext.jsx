@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
 import {
   INITIAL_PATIENTS, INITIAL_BILLS, INITIAL_APPOINTMENTS, INITIAL_USERS,
   INITIAL_MEDICINES, INITIAL_PROCEDURES, INITIAL_ROOMS, roleInfo,
   INITIAL_PAYMENTS, allocatePayment, pendingBillsForPatient, billBalance, DESIGNATION_TO_ROLE,
 } from './data.js';
-import { apiLogin, apiRegister, apiGetMe } from './api.js';
+import { apiLogin, apiRegister, apiGetMe, apiGetPatients, apiCreatePatient, apiUpdatePatient, apiDeletePatient } from './api.js';
 
 const AppContext = createContext(null);
 
@@ -17,6 +17,21 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(false);
   const [activeNav, setActiveNav] = useState('dashboard');
   const [patients, setPatients] = useState(INITIAL_PATIENTS);
+
+  const loadPatients = useCallback(async () => {
+    try {
+      const data = await apiGetPatients();
+      if (Array.isArray(data) && data.length > 0) {
+        setPatients(data);
+      }
+    } catch {
+      // Use the seeded local dataset if the API is temporarily unavailable.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPatients();
+  }, [loadPatients]);
   const [bills, setBills] = useState(INITIAL_BILLS);
   const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS);
   const [users, setUsers] = useState(INITIAL_USERS);
@@ -142,12 +157,13 @@ export function AppProvider({ children }) {
   }, [bills, patients, showToast]);
 
   const issueBill = useCallback(({ patientId, admissionYes, admissionDays, room, amount = 890 }) => {
+    const totalAmount = Number(amount) || 0;
     const newBill = {
       id: 'B-' + Math.floor(100 + Math.random() * 900),
       patientId,
       purpose: admissionYes ? 'Room Rent' : 'Consultation',
       desc: admissionYes ? `Admission — ${room} (${admissionDays} day(s)) + charges` : 'Consultation + charges',
-      amount,
+      amount: totalAmount,
       paid: 0,
       status: 'Pending',
     };
@@ -162,7 +178,7 @@ export function AppProvider({ children }) {
         room,
         type: 'IP',
         history: [
-          { d: 'Today', t: `Admitted — ${room}`, s: `Admission required: Yes, ${admissionDays} day(s). Bill ${newBill.id} issued (₹${amount}) — pending payment.` },
+          { d: 'Today', t: `Admitted — ${room}`, s: `Admission required: Yes, ${admissionDays} day(s). Bill ${newBill.id} issued (₹${totalAmount}) — pending payment.` },
           ...p.history,
         ],
       };
@@ -183,21 +199,54 @@ export function AppProvider({ children }) {
   }, [showToast]);
 
   /* ---- Manager / FOS: patient registration ---- */
-  const addPatient = useCallback((form) => {
-    const id = 'P-' + String(patients.length + 1).padStart(3, '0');
+  const addPatient = useCallback(async (form) => {
+    const id = form.id || 'P-' + String(patients.length + 1).padStart(3, '0');
     const newPatient = {
       id, name: form.name, gender: form.gender, age: Number(form.age) || 0, phone: form.phone,
-      type: 'OP', lastVisit: new Date().toISOString().slice(0, 10), doctor: form.doctor || '—',
+      type: form.type || 'OP', lastVisit: new Date().toISOString().slice(0, 10), doctor: form.doctor || '—',
       vitals: { temp: '—', bp: '—', pulse: '—', resp: '—' }, admitted: false, admissionDays: null, room: null,
       history: [{ d: 'Today', t: 'Registered', s: `New patient registered${form.registrationFee ? ' — registration charge collected' : ''}.` }],
     };
-    setPatients((prev) => [newPatient, ...prev]);
-    if (form.registrationFee) {
-      setBills((prev) => [...prev, { id: 'B-' + Math.floor(100 + Math.random() * 900), patientId: id, purpose: 'Registration', desc: 'Registration charge', amount: 200, paid: 200, status: 'Paid' }]);
+
+    try {
+      const saved = await apiCreatePatient(newPatient);
+      setPatients((prev) => [saved || newPatient, ...prev]);
+      if (form.registrationFee) {
+        setBills((prev) => [...prev, { id: 'B-' + Math.floor(100 + Math.random() * 900), patientId: id, purpose: 'Registration', desc: 'Registration charge', amount: 200, paid: 200, status: 'Paid' }]);
+      }
+      showToast(`Patient ${form.name} registered (${id})`);
+      return saved || newPatient;
+    } catch (err) {
+      setPatients((prev) => [newPatient, ...prev]);
+      showToast(`Patient ${form.name} registered locally (${id})`);
+      return newPatient;
     }
-    showToast(`Patient ${form.name} registered (${id})`);
-    return newPatient;
   }, [patients.length, showToast]);
+
+  const updatePatient = useCallback(async (patientId, patch) => {
+    try {
+      const updated = await apiUpdatePatient(patientId, patch);
+      setPatients((prev) => prev.map((p) => (p.id === patientId ? { ...p, ...updated } : p)));
+      showToast('Patient updated');
+      return updated;
+    } catch (err) {
+      setPatients((prev) => prev.map((p) => (p.id === patientId ? { ...p, ...patch } : p)));
+      showToast('Patient updated locally');
+      return null;
+    }
+  }, [showToast]);
+
+  const deletePatient = useCallback(async (patientId) => {
+    try {
+      await apiDeletePatient(patientId);
+      setPatients((prev) => prev.filter((p) => p.id !== patientId));
+      showToast('Patient deleted');
+      return true;
+    } catch (err) {
+      showToast('Could not delete patient from server');
+      return false;
+    }
+  }, [showToast]);
 
   /* ---- Manager / FOS: booking / appointments ---- */
   const bookAppointment = useCallback((form) => {
@@ -278,7 +327,7 @@ export function AppProvider({ children }) {
     currentRole: role ? roleInfo(role) : null,
     login, register, logout, restoreSession, goToLogin, goToRegister, navigate,
     openPatient, closeDrawer, markBillPaid, issueBill, saveConsultation, savePrescription, showToast,
-    addPatient, bookAppointment, payments, payPatientId, openPayment, closePayment, recordPayment,
+    addPatient, updatePatient, deletePatient, bookAppointment, payments, payPatientId, openPayment, closePayment, recordPayment,
     addUser, toggleUserStatus,
     addMedicine, updateMedicine, toggleMedicineStatus,
     addProcedure, updateProcedure, toggleProcedureStatus,
@@ -286,7 +335,7 @@ export function AppProvider({ children }) {
   }), [screen, role, activeNav, patients, bills, appointments, users, medicines, procedures, rooms,
       drawerPatientId, toastMsg, toastVisible, userName, employeeId, token, authLoading,
       login, register, logout, restoreSession, goToLogin, goToRegister, navigate, openPatient, closeDrawer, markBillPaid, issueBill,
-      saveConsultation, savePrescription, showToast, addPatient, bookAppointment,
+      saveConsultation, savePrescription, showToast, addPatient, updatePatient, deletePatient, bookAppointment,
       payments, payPatientId, openPayment, closePayment, recordPayment,
       addUser, toggleUserStatus, addMedicine, updateMedicine, toggleMedicineStatus,
       addProcedure, updateProcedure, toggleProcedureStatus, addRoom, setRoomStatus]);

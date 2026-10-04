@@ -7,15 +7,29 @@ export default function Billing() {
   const [patientId, setPatientId] = useState(patients[0]?.id);
   const [admissionYes, setAdmissionYes] = useState(false); // default: No
   const [admissionDays, setAdmissionDays] = useState(1);
-  const [room, setRoom] = useState(availableRooms[0]?.name || '');
+  const defaultRoom = availableRooms[0]?.name || rooms.find((r) => r.status === 'Occupied')?.name || '';
+  const [room, setRoom] = useState(defaultRoom);
+
+  const selectedRoom = rooms.find((r) => r.name === room) || null;
+  const roomRate = selectedRoom ? Number(selectedRoom.perNightCost || 0) : 0;
+  const roomCharge = admissionYes && selectedRoom ? roomRate * Math.max(1, Number(admissionDays || 1)) : 0;
+  const roomOptions = rooms.map((r) => ({
+    ...r,
+    label: r.status === 'Available'
+      ? `${r.name} — ₹${r.perNightCost}/night`
+      : `${r.name} — Allocated`,
+    disabled: r.status !== 'Available' && r.name !== room,
+  }));
 
   const handleIssue = () => {
+    const finalRoom = admissionYes ? room : null;
+    const finalAmount = admissionYes && finalRoom ? roomCharge : 890;
     issueBill({
       patientId,
       admissionYes,
       admissionDays: admissionYes ? Number(admissionDays) : null,
-      room: admissionYes ? room : null,
-      amount: 890,
+      room: finalRoom,
+      amount: finalAmount,
     });
     navigate('payments');
   };
@@ -66,10 +80,25 @@ export default function Billing() {
             <label>Room (if admitted)</label>
             <select disabled={!admissionYes} value={room} onChange={(e) => setRoom(e.target.value)}>
               {!admissionYes && <option>— Not applicable —</option>}
-              {availableRooms.length === 0 && admissionYes && <option>No rooms currently available</option>}
-              {availableRooms.map((r) => <option key={r.id}>{r.name}</option>)}
+              {!admissionYes && <option value="">— Not applicable —</option>}
+              {admissionYes && roomOptions.length === 0 && <option>No rooms available</option>}
+              {admissionYes && roomOptions.map((r) => (
+                <option key={r.id} value={r.name} disabled={r.disabled}>
+                  {r.label}
+                </option>
+              ))}
             </select>
           </div>
+          {admissionYes && selectedRoom && (
+            <div className="card" style={{ marginTop: 12, padding: '12px 14px', background: 'var(--surface)' }}>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Room charge</div>
+              <div style={{ fontWeight: 700 }}>
+                {selectedRoom.status === 'Available'
+                  ? `${selectedRoom.name} • ₹${selectedRoom.perNightCost} × ${admissionDays} day(s) = ₹${roomCharge}`
+                  : `${selectedRoom.name} • Allocated • ₹${selectedRoom.perNightCost} × ${admissionDays} day(s) = ₹${roomCharge}`}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
             <button className="btn" onClick={() => navigate('dashboard')}>Cancel</button>
             <button className="btn btn-accent" onClick={handleIssue}>Issue bill</button>

@@ -35,3 +35,27 @@ export function apiGetMe(token) {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export function apiGetPatients() {
+  return request('/patients');
+}
+
+export function apiCreatePatient(patient) {
+  return request('/patients', {
+    method: 'POST',
+    body: JSON.stringify(patient),
+  });
+}
+
+export function apiUpdatePatient(id, patient) {
+  return request(`/patients/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patient),
+  });
+}
+
+export function apiDeletePatient(id) {
+  return request(`/patients/${id}`, {
+    method: 'DELETE',
+  });
+}

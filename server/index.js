@@ -2,14 +2,16 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import 'dotenv/config';
-import authRoutes from './routes/auth.js'
+import authRoutes from './routes/auth.js';
+import patientRoutes from './routes/patient.js';
 
-const app=express();
+const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-app.use('/api/auth',authRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/patients', patientRoutes);
 
 const MONGO_URI=process.env.MONGO_URI ||'mongodb://localhost:27017/clinic';
 const PORT = process.env.PORT || 5000;
