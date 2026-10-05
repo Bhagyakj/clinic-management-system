@@ -3,10 +3,10 @@ import mongoose from 'mongoose';
 const userSchema = new mongoose.Schema({
   EmployeeId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
-  designation: { 
-    type: String, 
-    enum: ['Manager','Front Office Staff','Pharmacist','Nurse','Junior Doctor','Senior Doctor'],
-    required: true
+  designation: {
+    type: String,
+    enum: ['Manager', 'Front Office Staff', 'Pharmacist', 'Nurse', 'Junior Doctor', 'Senior Doctor'],
+    required: true,
   },
   dateOfBirth: { type: Date },
   mobile: { type: String },
