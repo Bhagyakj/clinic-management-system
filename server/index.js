@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import 'dotenv/config';
 import authRoutes from './routes/auth.js';
+import patientRoutes from './routes/patients.js';
 import doctorRoutes from './routes/doctors.js';
 import appointmentRoutes from './routes/appointments.js';
 import paymentRoutes from './routes/payments.js';
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/patients', patientRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/payments', paymentRoutes);

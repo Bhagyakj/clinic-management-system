@@ -19,14 +19,14 @@ export default function Dashboard() {
 function ManagerBody() {
   const { patients, bills, rooms } = useApp();
   const pending = pendingBillsCount(bills);
-  const occupiedRooms = rooms.filter((r) => r.status === 'Occupied').length;
+  const occupiedRooms = rooms.filter((r) => r.status === 'occupied').length;
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Total Patients" value={patients.length} delta="+12% from last week" />
-        <StatCard label="Today's Appointments" value="28" delta="+5% from yesterday" />
-        <StatCard label="Pending Payments" value={pending} delta={pending > 0 ? `${pending} bill(s) awaiting payment` : 'All bills cleared'} neg />
+        <StatCard label="Total Patients" value={patients.length} delta="live from database" />
+        <StatCard label="Pending Bills" value={pending} delta={pending > 0 ? `${pending} bill(s) awaiting payment` : 'All bills cleared'} neg={pending > 0} />
         <StatCard label="Occupied Rooms" value={occupiedRooms} delta={`of ${rooms.length} total rooms`} />
+        <StatCard label="Admitted Patients" value={patients.filter((p) => p.admitted).length} delta="currently IP" />
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Quick actions</h3>
@@ -40,20 +40,22 @@ function ManagerBody() {
       <div className="grid-2">
         <div className="card">
           <h3>Recent patients</h3>
-          <table>
-            <tbody>
-              <tr><th>ID</th><th>Name</th><th>Type</th><th>Last Visit</th><th>Payment</th></tr>
-              {patients.slice(0, 5).map((p) => (
-                <tr key={p.id}>
-                  <td>{p.id}</td>
-                  <td><NameLink id={p.id}>{p.name}</NameLink></td>
-                  <td>{p.type}</td>
-                  <td>{p.lastVisit}</td>
-                  <td><PayBadge status={patientPayStatus(bills, p.id)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {patients.length === 0 ? <div className="popup-empty">No patients yet.</div> : (
+            <table>
+              <tbody>
+                <tr><th>ID</th><th>Name</th><th>Type</th><th>Last Visit</th><th>Payment</th></tr>
+                {patients.slice(0, 5).map((p) => (
+                  <tr key={p._id}>
+                    <td>{p.id}</td>
+                    <td><NameLink id={p._id}>{p.name}</NameLink></td>
+                    <td>{p.type}</td>
+                    <td>{p.lastVisit || '—'}</td>
+                    <td><PayBadge status={patientPayStatus(bills, p._id)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
         <div className="card">
           <h3>Room status</h3>
@@ -65,61 +67,66 @@ function ManagerBody() {
 }
 
 function FosBody() {
-  const { patients, bills, appointments, navigate, openPayment } = useApp();
-  const pending = bills.filter((b) => b.status === 'Pending');
-  const pendingCount = pending.length;
+  const { patients, bills, appointments, navigate, openPayment, showToast } = useApp();
+  const pendingBills = bills.filter((b) => b.status !== 'paid');
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Total Patients" value={patients.length} delta="+8% from last week" />
-        <StatCard label="Today's Appointments" value={appointments.length} delta="+3% from yesterday" />
-        <StatCard label="Pending Payments" value={pendingCount} delta={pendingCount > 0 ? `${pendingCount} patient bill(s) not yet cleared` : 'All patients cleared ✓'} neg={pendingCount > 0} />
+        <StatCard label="Total Patients" value={patients.length} delta="live from database" />
+        <StatCard label="Appointments Booked" value={appointments.length} delta="all time" />
+        <StatCard label="Pending Bills" value={pendingBills.length} delta={pendingBills.length > 0 ? `${pendingBills.length} not yet cleared` : 'All cleared ✓'} neg={pendingBills.length > 0} />
         <StatCard label="Admissions" value={patients.filter((p) => p.admitted).length} delta="currently admitted" />
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
         <h3>Quick actions</h3>
         <div className="qa-grid">
           <QuickAction icon="🧑‍🤝‍🧑" label="Register Patient" nav="patients" />
-          <QuickAction icon="📅" label="Book Appointment" nav="appointments" />
+          <QuickAction icon="📅" label="Book Appointment" nav="patients" />
           <QuickAction icon="💳" label="Make Payment" nav="payments" />
           <QuickAction icon="🛏️" label="New Admission" nav="admissions" />
         </div>
       </div>
       <div className="grid-2">
         <div className="card">
-          <h3>Today's appointments</h3>
-          <table>
-            <tbody>
-              <tr><th>Time</th><th>Patient</th><th>Doctor</th><th>Status</th></tr>
-              {appointments.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.time}</td>
-                  <td><NameLink id={a.patientId}>{a.patient}</NameLink></td>
-                  <td>{a.doctor}</td>
-                  <td><Badge status={a.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3>Appointments</h3>
+          {appointments.length === 0 ? <div className="popup-empty">No appointments booked yet.</div> : (
+            <table>
+              <tbody>
+                <tr><th>Date</th><th>Time</th><th>Patient</th><th>Doctor</th><th>Status</th></tr>
+                {appointments.slice(0, 8).map((a) => {
+                  const patient = patients.find((p) => p._id === a.patientId);
+                  return (
+                    <tr key={a._id}>
+                      <td>{a.date ? new Date(a.date).toLocaleDateString() : '—'}</td>
+                      <td>{a.time}</td>
+                      <td>{patient ? <NameLink id={patient._id}>{patient.name}</NameLink> : '—'}</td>
+                      <td>{a.doctorId?.name || '—'}</td>
+                      <td><Badge status={a.status} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
         <div className="card">
           <h3>Pending payments</h3>
-          {pending.length === 0 ? (
+          {pendingBills.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--muted)', fontSize: 13 }}>
               ✅ All bills are cleared — no pending payments.
             </div>
           ) : (
             <table>
               <tbody>
-                <tr><th>Patient</th><th>Bill</th><th>Amount</th><th></th></tr>
-                {pending.map((b) => {
-                  const p = patients.find((x) => x.id === b.patientId);
+                <tr><th>Patient</th><th>Charges</th><th>Balance</th><th></th></tr>
+                {pendingBills.map((b) => {
+                  const p = patients.find((x) => x._id === b.patientId);
                   return (
-                    <tr key={b.id}>
-                      <td><NameLink id={p.id}>{p.name}</NameLink></td>
-                      <td>{b.desc}</td>
+                    <tr key={b._id}>
+                      <td>{p ? <NameLink id={p._id}>{p.name}</NameLink> : '—'}</td>
+                      <td style={{ fontSize: 12.5 }}>{(b.purpose || []).map((l) => l.description).join(', ')}</td>
                       <td>₹{billBalance(b)}</td>
-                      <td><button className="btn btn-sm btn-accent" onClick={() => openPayment(b.patientId)}>Collect</button></td>
+                      <td><button className="btn btn-sm btn-accent" onClick={() => openPayment(b._id)}>Collect</button></td>
                     </tr>
                   );
                 })}
@@ -134,31 +141,36 @@ function FosBody() {
 }
 
 function JdocBody() {
-  const { navigate, appointments } = useApp();
+  const { navigate, appointments, patients } = useApp();
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Today's Appointments" value={appointments.length} delta="+2 from yesterday" />
-        <StatCard label="Waiting Patients" value={appointments.filter((a) => a.status === 'waiting').length} delta="-1 from yesterday" />
-        <StatCard label="Completed Consultations" value="8" delta="+3 from yesterday" />
+        <StatCard label="Appointments" value={appointments.length} delta="all time" />
+        <StatCard label="Confirmed" value={appointments.filter((a) => a.status === 'confirmed').length} delta="awaiting consult" />
+        <StatCard label="Completed" value={appointments.filter((a) => a.status === 'completed').length} delta="all time" />
       </div>
       <div className="grid-2">
         <div className="card">
-          <h3>Today's appointments</h3>
-          <table>
-            <tbody>
-              <tr><th>Time</th><th>Patient</th><th>Type</th><th>Status</th><th></th></tr>
-              {appointments.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.time}</td>
-                  <td><NameLink id={a.patientId}>{a.patient}</NameLink></td>
-                  <td>OP</td>
-                  <td><Badge status={a.status} /></td>
-                  <td><button className="btn btn-sm" onClick={() => navigate('consultation')}>View</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3>Appointments</h3>
+          {appointments.length === 0 ? <div className="popup-empty">No appointments booked yet.</div> : (
+            <table>
+              <tbody>
+                <tr><th>Date</th><th>Time</th><th>Patient</th><th>Status</th><th></th></tr>
+                {appointments.slice(0, 8).map((a) => {
+                  const patient = patients.find((p) => p._id === a.patientId);
+                  return (
+                    <tr key={a._id}>
+                      <td>{a.date ? new Date(a.date).toLocaleDateString() : '—'}</td>
+                      <td>{a.time}</td>
+                      <td>{patient ? <NameLink id={patient._id}>{patient.name}</NameLink> : '—'}</td>
+                      <td><Badge status={a.status} /></td>
+                      <td><button className="btn btn-sm" onClick={() => navigate('consultation')}>View</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
         <div className="card">
           <h3>Quick actions</h3>
@@ -177,27 +189,28 @@ function SdocBody() {
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Today's Appointments" value="14" delta="+1 from yesterday" />
-        <StatCard label="Pending Prescriptions" value="6" delta="-2 from yesterday" neg />
-        <StatCard label="Patient Histories Reviewed" value="24" delta="+4 from yesterday" />
+        <StatCard label="Total Patients" value={patients.length} delta="live from database" />
+        <StatCard label="Admitted (IP)" value={patients.filter((p) => p.admitted).length} delta="currently" />
       </div>
       <div className="grid-2">
         <div className="card">
           <h3>Recent patients</h3>
-          <table>
-            <tbody>
-              <tr><th>ID</th><th>Name</th><th>Type</th><th>Last Visit</th><th>Payment</th></tr>
-              {patients.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.id}</td>
-                  <td><NameLink id={p.id}>{p.name}</NameLink></td>
-                  <td>{p.type}</td>
-                  <td>{p.lastVisit}</td>
-                  <td><PayBadge status={patientPayStatus(bills, p.id)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {patients.length === 0 ? <div className="popup-empty">No patients yet.</div> : (
+            <table>
+              <tbody>
+                <tr><th>ID</th><th>Name</th><th>Type</th><th>Last Visit</th><th>Payment</th></tr>
+                {patients.map((p) => (
+                  <tr key={p._id}>
+                    <td>{p.id}</td>
+                    <td><NameLink id={p._id}>{p.name}</NameLink></td>
+                    <td>{p.type}</td>
+                    <td>{p.lastVisit || '—'}</td>
+                    <td><PayBadge status={patientPayStatus(bills, p._id)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
         <div className="card">
           <h3>Quick actions</h3>
@@ -217,26 +230,25 @@ function NurseBody() {
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="My IP Patients" value={ip.length} delta="+1 from yesterday" />
-        <StatCard label="Today's Medicines" value="8" delta="+2 from yesterday" />
-        <StatCard label="Today's Procedures" value="4" delta="-1 from yesterday" neg />
+        <StatCard label="My IP Patients" value={ip.length} delta="currently admitted" />
       </div>
       <div className="grid-2">
         <div className="card">
-          <h3>My IP patients</h3>
-          <table>
-            <tbody>
-              <tr><th>Patient</th><th>Room</th><th>Admitted On</th><th>Status</th></tr>
-              {ip.map((p) => (
-                <tr key={p.id}>
-                  <td><NameLink id={p.id}>{p.name}</NameLink></td>
-                  <td>{p.room}</td>
-                  <td>{p.lastVisit}</td>
-                  <td><Badge status="stable" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3>IP patients</h3>
+          {ip.length === 0 ? <div className="popup-empty">No patients currently admitted.</div> : (
+            <table>
+              <tbody>
+                <tr><th>Patient</th><th>Room</th><th>Status</th></tr>
+                {ip.map((p) => (
+                  <tr key={p._id}>
+                    <td><NameLink id={p._id}>{p.name}</NameLink></td>
+                    <td>{p.room}</td>
+                    <td><Badge status="stable" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
         <div className="card">
           <h3>Quick actions</h3>
@@ -256,27 +268,26 @@ function PharmBody() {
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Pending Prescriptions" value="9" delta="-3% from yesterday" neg />
-        <StatCard label="Pending Bills" value="5" delta="+4% from yesterday" />
-        <StatCard label="Delivered Medicines" value="18" delta="+6% from yesterday" />
+        <StatCard label="Total Patients" value={patients.length} delta="live from database" />
       </div>
       <div className="grid-2">
         <div className="card">
-          <h3>Pending prescriptions</h3>
-          <table>
-            <tbody>
-              <tr><th>Patient</th><th>Doctor</th><th>Date</th><th>Status</th><th></th></tr>
-              {patients.slice(0, 3).map((p) => (
-                <tr key={p.id}>
-                  <td><NameLink id={p.id}>{p.name}</NameLink></td>
-                  <td>{p.doctor}</td>
-                  <td>{p.lastVisit}</td>
-                  <td><Badge status="pending" /></td>
-                  <td><button className="btn btn-sm">View</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3>Patients</h3>
+          {patients.length === 0 ? <div className="popup-empty">No patients yet.</div> : (
+            <table>
+              <tbody>
+                <tr><th>Patient</th><th>Doctor</th><th>Last Visit</th><th></th></tr>
+                {patients.slice(0, 5).map((p) => (
+                  <tr key={p._id}>
+                    <td><NameLink id={p._id}>{p.name}</NameLink></td>
+                    <td>{p.doctor}</td>
+                    <td>{p.lastVisit || '—'}</td>
+                    <td><button className="btn btn-sm">View</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
         <div className="card">
           <h3>Quick actions</h3>

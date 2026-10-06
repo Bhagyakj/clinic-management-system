@@ -6,7 +6,7 @@ import { PayBadge } from './Shared.jsx';
 export default function PatientDrawer() {
   const { patients, bills, drawerPatientId, closeDrawer, navigate, openPayment } = useApp();
   const open = Boolean(drawerPatientId);
-  const p = patients.find((x) => x.id === drawerPatientId);
+  const p = patients.find((x) => x._id === drawerPatientId);
 
   return (
     <>
@@ -25,29 +25,29 @@ export default function PatientDrawer() {
               <div className="drawer-section">
                 <h4>Latest vitals</h4>
                 <div className="vital-mini">
-                  <div className="box"><div className="v">{p.vitals.temp}</div><div className="l">Temperature</div></div>
-                  <div className="box"><div className="v">{p.vitals.bp}</div><div className="l">Blood pressure</div></div>
-                  <div className="box"><div className="v">{p.vitals.pulse}</div><div className="l">Pulse</div></div>
-                  <div className="box"><div className="v">{p.vitals.resp}</div><div className="l">Respiration</div></div>
+                  <div className="box"><div className="v">{p.vitals?.temp || '—'}</div><div className="l">Temperature</div></div>
+                  <div className="box"><div className="v">{p.vitals?.bp || '—'}</div><div className="l">Blood pressure</div></div>
+                  <div className="box"><div className="v">{p.vitals?.pulse || '—'}</div><div className="l">Pulse</div></div>
+                  <div className="box"><div className="v">{p.vitals?.resp || '—'}</div><div className="l">Respiration</div></div>
                 </div>
               </div>
 
               <div className="drawer-section">
                 <h4>Billing &amp; admission</h4>
                 <div className="vital-mini">
-                  <div className="box"><div className="v"><PayBadge status={patientPayStatus(bills, p.id)} /></div><div className="l">Payment status</div></div>
+                  <div className="box"><div className="v"><PayBadge status={patientPayStatus(bills, p._id)} /></div><div className="l">Payment status</div></div>
                   <div className="box"><div className="v">{p.admitted ? (p.admissionDays != null ? `${p.admissionDays} day(s)` : '—') : 'Not admitted'}</div><div className="l">Admission days</div></div>
                 </div>
-                {billsForPatient(bills, p.id).length > 0 && (
+                {billsForPatient(bills, p._id).length > 0 && (
                   <table style={{ marginTop: 12 }}>
                     <tbody>
-                      <tr><th>Bill</th><th>Amount</th><th>Status</th><th></th></tr>
-                      {billsForPatient(bills, p.id).map((b) => (
-                        <tr key={b.id}>
-                          <td>{b.id} — {b.desc}</td>
-                          <td>₹{billBalance(b)}{b.paid > 0 && b.status !== 'Paid' ? ` of ₹${b.amount}` : ''}</td>
-                          <td><PayBadge status={b.status} /></td>
-                          <td>{b.status === 'Pending' && <button className="btn btn-sm btn-accent" onClick={() => openPayment(b.patientId)}>Collect</button>}</td>
+                      <tr><th>Bill</th><th>Balance</th><th>Status</th><th></th></tr>
+                      {billsForPatient(bills, p._id).map((b) => (
+                        <tr key={b._id}>
+                          <td>{b._id.slice(-6).toUpperCase()} — {(b.purpose || []).map((l) => l.description).join(', ')}</td>
+                          <td>₹{billBalance(b)}{b.paidAmount > 0 && b.status !== 'paid' ? ` of ₹${b.totalAmount}` : ''}</td>
+                          <td><PayBadge status={b.status === 'paid' ? 'Paid' : 'Pending'} /></td>
+                          <td>{b.status !== 'paid' && <button className="btn btn-sm btn-accent" onClick={() => openPayment(b._id)}>Collect</button>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -57,7 +57,7 @@ export default function PatientDrawer() {
 
               <div className="drawer-section">
                 <h4>Visit history</h4>
-                {p.history.map((h, i) => (
+                {(p.history || []).map((h, i) => (
                   <div className="history-entry" key={i}>
                     <div className="d">{h.d}</div>
                     <div className="t">{h.t}</div>

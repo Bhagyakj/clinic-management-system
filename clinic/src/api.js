@@ -36,26 +36,41 @@ export function apiGetMe(token) {
   });
 }
 
-export function apiGetPatients() {
-  return request('/patients');
-}
+// Everything below needs a token (set by login/restoreSession).
+// `authed(token)` returns a small set of helpers that all send it automatically.
+export function authed(token) {
+  const auth = (options = {}) => ({ ...options, headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) } });
 
-export function apiCreatePatient(patient) {
-  return request('/patients', {
-    method: 'POST',
-    body: JSON.stringify(patient),
-  });
-}
+  return {
+    // Patients
+    listPatients: () => request('/patients', auth()),
+    getPatient: (id) => request(`/patients/${id}`, auth()),
+    createPatient: (body) => request('/patients', auth({ method: 'POST', body: JSON.stringify(body) })),
+    updatePatient: (id, body) => request(`/patients/${id}`, auth({ method: 'PUT', body: JSON.stringify(body) })),
+    deletePatient: (id) => request(`/patients/${id}`, auth({ method: 'DELETE' })),
 
-export function apiUpdatePatient(id, patient) {
-  return request(`/patients/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(patient),
-  });
-}
+    // Doctors
+    listDoctors: () => request('/doctors', auth()),
+    createDoctor: (body) => request('/doctors', auth({ method: 'POST', body: JSON.stringify(body) })),
 
-export function apiDeletePatient(id) {
-  return request(`/patients/${id}`, {
-    method: 'DELETE',
-  });
+    // Appointments
+    listAppointments: (query = '') => request(`/appointments${query}`, auth()),
+    bookAppointment: (body) => request('/appointments', auth({ method: 'POST', body: JSON.stringify(body) })),
+    updateAppointmentStatus: (id, status) => request(`/appointments/${id}/status`, auth({ method: 'PATCH', body: JSON.stringify({ status }) })),
+
+    // Payments
+    listPayments: (query = '') => request(`/payments${query}`, auth()),
+    createBill: (body) => request('/payments', auth({ method: 'POST', body: JSON.stringify(body) })),
+    collectPayment: (billId, body) => request(`/payments/${billId}/collect`, auth({ method: 'POST', body: JSON.stringify(body) })),
+
+    // Rooms
+    listRooms: (query = '') => request(`/rooms${query}`, auth()),
+    createRoom: (body) => request('/rooms', auth({ method: 'POST', body: JSON.stringify(body) })),
+    updateRoomStatus: (id, status) => request(`/rooms/${id}/status`, auth({ method: 'PATCH', body: JSON.stringify({ status }) })),
+
+    // Admissions
+    listAdmissions: () => request('/admissions', auth()),
+    admitPatient: (body) => request('/admissions', auth({ method: 'POST', body: JSON.stringify(body) })),
+    dischargePatient: (admissionId, body) => request(`/admissions/${admissionId}/discharge`, auth({ method: 'POST', body: JSON.stringify(body) })),
+  };
 }

@@ -1,10 +1,9 @@
-import React, { createContext, useContext, useMemo, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
 import {
-  INITIAL_PATIENTS, INITIAL_BILLS, INITIAL_APPOINTMENTS, INITIAL_USERS,
-  INITIAL_MEDICINES, INITIAL_PROCEDURES, INITIAL_ROOMS, roleInfo,
-  INITIAL_PAYMENTS, allocatePayment, pendingBillsForPatient, billBalance, DESIGNATION_TO_ROLE,
+  roleInfo, DESIGNATION_TO_ROLE,
+  INITIAL_USERS, INITIAL_MEDICINES, INITIAL_PROCEDURES, // still mock — no backend for these yet
 } from './data.js';
-import { apiLogin, apiRegister, apiGetMe, apiGetPatients, apiCreatePatient, apiUpdatePatient, apiDeletePatient } from './api.js';
+import { apiLogin, apiRegister, apiGetMe, authed } from './api.js';
 
 const AppContext = createContext(null);
 
@@ -16,30 +15,27 @@ export function AppProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('mf_token') || '');
   const [authLoading, setAuthLoading] = useState(false);
   const [activeNav, setActiveNav] = useState('dashboard');
-  const [patients, setPatients] = useState(INITIAL_PATIENTS);
 
-  const loadPatients = useCallback(async () => {
-    try {
-      const data = await apiGetPatients();
-      if (Array.isArray(data) && data.length > 0) {
-        setPatients(data);
-      }
-    } catch {
-      // Use the seeded local dataset if the API is temporarily unavailable.
-    }
-  }, []);
+  // Real data from the API. Empty until loadAllData() runs after login.
+  const [patients, setPatients] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [bills, setBills] = useState([]);       // Payment documents
+  const [rooms, setRooms] = useState([]);
+  const [admissions, setAdmissions] = useState([]); // PatientRoom documents
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState('');
 
-  useEffect(() => {
-    loadPatients();
-  }, [loadPatients]);
-  const [bills, setBills] = useState(INITIAL_BILLS);
-  const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS);
+  // Still local/mock — no backend built yet for Users (beyond auth), Medicines, Procedures
   const [users, setUsers] = useState(INITIAL_USERS);
   const [medicines, setMedicines] = useState(INITIAL_MEDICINES);
   const [procedures, setProcedures] = useState(INITIAL_PROCEDURES);
-  const [rooms, setRooms] = useState(INITIAL_ROOMS);
-  const [payments, setPayments] = useState(INITIAL_PAYMENTS);
-  const [payPatientId, setPayPatientId] = useState(null); // patient whose 'Collect payment' popup is open
+
+  // collectPayment is a per-BILL action (POST /payments/:id/collect splits
+  // across that one bill's own purpose lines) — so the popup is keyed by
+  // billId, not patientId. A patient with several separate bills needs the
+  // Payments page to collect each one individually.
+  const [payBillId, setPayBillId] = useState(null);
   const [drawerPatientId, setDrawerPatientId] = useState(null);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
@@ -50,10 +46,28 @@ export function AppProvider({ children }) {
     setTimeout(() => setToastVisible(false), 2200);
   }, []);
 
-  // Looks up the Hospital ID (this would be a server call after OTP check)
-  // and routes straight to that user's dashboard — no role-picker screen.
-  // Calls the real backend. On success, routes straight into the matching
-  // role's dashboard — no role-picker screen.
+  const api = useMemo(() => (token ? authed(token) : null), [token]);
+
+  // Loads every collection the app needs in one go. Takes an explicit client
+  // (rather than always relying on the `api` memo) so it can run immediately
+  // after login/restoreSession, before `token` state has re-rendered `api`.
+  const loadAllData = useCallback(async (client) => {
+    setDataLoading(true);
+    setDataError('');
+    try {
+      const [p, d, r, pay, appt, adm] = await Promise.all([
+        client.listPatients(), client.listDoctors(), client.listRooms(),
+        client.listPayments(), client.listAppointments(), client.listAdmissions(),
+      ]);
+      setPatients(p); setDoctors(d); setRooms(r); setBills(pay); setAppointments(appt); setAdmissions(adm);
+    } catch (err) {
+      setDataError(err.message);
+      showToast(`Couldn't load data from the server: ${err.message}`);
+    } finally {
+      setDataLoading(false);
+    }
+  }, [showToast]);
+
   const login = useCallback(async (empId, password) => {
     setAuthLoading(true);
     try {
@@ -67,13 +81,14 @@ export function AppProvider({ children }) {
       setEmployeeId(data.employeeId || empId);
       setActiveNav('dashboard');
       setScreen('app');
+      await loadAllData(authed(data.token));
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
     } finally {
       setAuthLoading(false);
     }
-  }, []);
+  }, [loadAllData]);
 
   const register = useCallback(async (form) => {
     setAuthLoading(true);
@@ -101,181 +116,179 @@ export function AppProvider({ children }) {
       setEmployeeId(me.EmployeeId);
       setActiveNav('dashboard');
       setScreen('app');
+      await loadAllData(authed(saved));
     } catch {
       localStorage.removeItem('mf_token');
     }
-  }, []);
+  }, [loadAllData]);
 
-  const goToLogin = useCallback(() => { setScreen('login'); }, []);
-  const goToRegister = useCallback(() => { setScreen('register'); }, []);
+  const goToLogin = useCallback(() => setScreen('login'), []);
+  const goToRegister = useCallback(() => setScreen('register'), []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('mf_token');
-    setToken('');
-    setRole(null);
-    setUserName('');
-    setEmployeeId('');
+    setToken(''); setRole(null); setUserName(''); setEmployeeId('');
+    setPatients([]); setDoctors([]); setAppointments([]); setBills([]); setRooms([]); setAdmissions([]);
     setScreen('login');
   }, []);
 
   const navigate = useCallback((navKey) => setActiveNav(navKey), []);
-
   const openPatient = useCallback((id) => setDrawerPatientId(id), []);
   const closeDrawer = useCallback(() => setDrawerPatientId(null), []);
+  const openPayment = useCallback((billId) => setPayBillId(billId), []);
+  const closePayment = useCallback(() => setPayBillId(null), []);
 
-  const markBillPaid = useCallback((billId) => {
-    setBills((prev) => prev.map((b) => (b.id === billId ? { ...b, paid: b.amount, status: 'Paid' } : b)));
-    showToast('Bill marked as paid');
-  }, [showToast]);
-
-  const openPayment = useCallback((patientId) => setPayPatientId(patientId), []);
-  const closePayment = useCallback(() => setPayPatientId(null), []);
-
-  // Record a (possibly partial) payment. It is split across the patient's pending
-  // bills oldest-first; whatever isn't covered stays pending as its own row.
-  const recordPayment = useCallback(({ patientId, amount, method, reference }) => {
-    const pending = pendingBillsForPatient(bills, patientId);
-    const allocations = allocatePayment(pending, amount).filter((a) => a.applied > 0);
-    if (allocations.length === 0) return null;
-    setBills((prev) => prev.map((b) => {
-      const a = allocations.find((x) => x.billId === b.id);
-      if (!a) return b;
-      const paid = (b.paid || 0) + a.applied;
-      return { ...b, paid, status: paid >= b.amount ? 'Paid' : 'Pending' };
-    }));
-    const patient = patients.find((p) => p.id === patientId);
-    setPayments((prev) => [{
-      id: 'PAY-' + String(prev.length + 1).padStart(3, '0'), patientId, amount, method, reference: reference || '',
-      date: new Date().toISOString().slice(0, 10), allocations,
-    }, ...prev]);
-    const cleared = allocations.filter((a) => a.remaining === 0).length;
-    const left = pending.length - cleared;
-    showToast(left > 0
-      ? `₹${amount} received from ${patient?.name} — ${left} charge(s) still pending`
-      : `₹${amount} received — ${patient?.name} is fully cleared`);
-    return allocations;
-  }, [bills, patients, showToast]);
-
-  const issueBill = useCallback(({ patientId, admissionYes, admissionDays, room, amount = 890 }) => {
-    const totalAmount = Number(amount) || 0;
-    const newBill = {
-      id: 'B-' + Math.floor(100 + Math.random() * 900),
-      patientId,
-      purpose: admissionYes ? 'Room Rent' : 'Consultation',
-      desc: admissionYes ? `Admission — ${room} (${admissionDays} day(s)) + charges` : 'Consultation + charges',
-      amount: totalAmount,
-      paid: 0,
-      status: 'Pending',
-    };
-    setBills((prev) => [...prev, newBill]);
-    setPatients((prev) => prev.map((p) => {
-      if (p.id !== patientId) return p;
-      if (!admissionYes) return p;
-      return {
-        ...p,
-        admitted: true,
-        admissionDays,
-        room,
-        type: 'IP',
-        history: [
-          { d: 'Today', t: `Admitted — ${room}`, s: `Admission required: Yes, ${admissionDays} day(s). Bill ${newBill.id} issued (₹${totalAmount}) — pending payment.` },
-          ...p.history,
-        ],
-      };
-    }));
-    if (admissionYes && room) {
-      setRooms((prev) => prev.map((r) => (r.name === room ? { ...r, status: 'Occupied' } : r)));
+  /* ---- Patients: real API ---- */
+  // `form.patientId` throughout this file means the patient's Mongo _id —
+  // that's what every cross-referencing endpoint (appointments/payments/
+  // admissions) expects, and it's always present on a fetched patient.
+  const addPatient = useCallback(async (form) => {
+    if (!api) return;
+    try {
+      const patient = await api.createPatient({
+        name: form.name, gender: form.gender, age: form.age, phone: form.phone, doctor: form.doctor || '—',
+      });
+      setPatients((prev) => [patient, ...prev]);
+      if (form.registrationFee) {
+        const bill = await api.createBill({ patientId: patient._id, purpose: [{ description: 'Registration charge', amount: 200 }] });
+        const paid = await api.collectPayment(bill._id, { amount: 200, method: 'Cash' });
+        setBills((prev) => [paid, ...prev.filter((b) => b._id !== bill._id)]);
+      }
+      showToast(`Patient ${form.name} registered (${patient.id})`);
+      return patient;
+    } catch (err) {
+      showToast(`Couldn't register patient: ${err.message}`);
     }
-    showToast(admissionYes ? `Bill issued — admission for ${admissionDays} day(s). Payment pending.` : 'Bill issued — payment pending. Mark it paid from Payments.');
-    return newBill;
-  }, [showToast]);
+  }, [api, showToast]);
+
+  /* ---- Appointments: real API ---- */
+  const bookAppointment = useCallback(async (form) => {
+    if (!api) return;
+    try {
+      const appt = await api.bookAppointment({
+        patientId: form.patientId, doctorId: form.doctorId, date: form.date, time: form.time, notes: form.notes,
+      });
+      const charges = form.charges || [];
+      const createdBills = [];
+      for (const c of charges) {
+        const bill = await api.createBill({ patientId: form.patientId, purpose: [{ description: c.desc, amount: c.amount }] });
+        createdBills.push(bill);
+      }
+      // bookAppointment updates appointmentHistory/lastVisit/doctor on the
+      // server — refetch just this one patient rather than the whole list.
+      const refreshed = await api.getPatient(form.patientIdCustom);
+      setPatients((prev) => prev.map((p) => (p._id === refreshed._id ? refreshed : p)));
+      setAppointments((prev) => [appt, ...prev]);
+      if (createdBills.length) setBills((prev) => [...createdBills, ...prev]);
+      const total = charges.reduce((sum, c) => sum + c.amount, 0);
+      showToast(total > 0
+        ? `Appointment booked — ₹${total} added to Payments as pending`
+        : 'Appointment booked — no charge due');
+      return appt;
+    } catch (err) {
+      showToast(`Couldn't book appointment: ${err.message}`);
+    }
+  }, [api, showToast]);
+
+  /* ---- Billing: real API ---- */
+  const createBill = useCallback(async (patientId, items) => {
+    if (!api) return;
+    try {
+      const bill = await api.createBill({ patientId, purpose: items.map((i) => ({ description: i.desc, amount: i.amount })) });
+      setBills((prev) => [bill, ...prev]);
+      showToast('Bill issued — payment pending.');
+      return bill;
+    } catch (err) {
+      showToast(`Couldn't issue bill: ${err.message}`);
+    }
+  }, [api, showToast]);
+
+  // Collects a (possibly partial) payment against ONE bill, splitting it
+  // across that bill's purpose lines oldest-first (done server-side).
+  const collectPayment = useCallback(async (billId, { amount, method, reference }) => {
+    if (!api) return;
+    try {
+      const updated = await api.collectPayment(billId, { amount, method, transactionId: reference });
+      setBills((prev) => prev.map((b) => (b._id === billId ? updated : b)));
+      const patient = patients.find((p) => p._id === updated.patientId);
+      showToast(updated.status === 'paid'
+        ? `₹${amount} received — ${patient?.name || 'patient'} is fully cleared on this bill`
+        : `₹${amount} received — ₹${updated.totalAmount - updated.paidAmount} still pending on this bill`);
+      return updated;
+    } catch (err) {
+      showToast(`Couldn't record payment: ${err.message}`);
+    }
+  }, [api, patients, showToast]);
+
+  /* ---- Rooms: real API (Manager manages the list; FOS allocates via Admissions) ---- */
+  const addRoom = useCallback(async (form) => {
+    if (!api) return;
+    try {
+      const room = await api.createRoom({
+        roomNumber: form.roomNumber, type: form.type || 'general', capacity: Number(form.capacity) || 1,
+        perNightCost: Number(form.perNightCost), facilities: form.facilities || [],
+      });
+      setRooms((prev) => [...prev, room]);
+      showToast(`Room ${room.roomNumber} added`);
+    } catch (err) {
+      showToast(`Couldn't add room: ${err.message}`);
+    }
+  }, [api, showToast]);
+
+  const setRoomStatus = useCallback(async (roomId, status) => {
+    if (!api) return;
+    try {
+      const room = await api.updateRoomStatus(roomId, status);
+      setRooms((prev) => prev.map((r) => (r._id === roomId ? room : r)));
+    } catch (err) {
+      showToast(`Couldn't update room: ${err.message}`);
+    }
+  }, [api, showToast]);
+
+  /* ---- Admissions: real API ---- */
+  const admitPatient = useCallback(async (form) => {
+    if (!api) return;
+    try {
+      const admission = await api.admitPatient({ patientId: form.patientId, roomId: form.roomId, fromDate: form.fromDate });
+      setAdmissions((prev) => [admission, ...prev]);
+      // admitPatient updates patient.admitted/room/type and the room's status server-side
+      const [refreshedPatient, refreshedRooms] = await Promise.all([api.getPatient(form.patientIdCustom), api.listRooms()]);
+      setPatients((prev) => prev.map((p) => (p._id === refreshedPatient._id ? refreshedPatient : p)));
+      setRooms(refreshedRooms);
+      showToast(`Admitted to Room ${form.roomNumber || ''}`.trim());
+      return admission;
+    } catch (err) {
+      showToast(`Couldn't admit patient: ${err.message}`);
+    }
+  }, [api, showToast]);
+
+  const dischargePatient = useCallback(async (admissionId, { toDate, patientIdCustom }) => {
+    if (!api) return;
+    try {
+      const result = await api.dischargePatient(admissionId, { toDate });
+      setAdmissions((prev) => prev.map((a) => (a._id === admissionId ? result.admission : a)));
+      if (result.bill) setBills((prev) => [result.bill, ...prev]);
+      const [refreshedPatient, refreshedRooms] = await Promise.all([api.getPatient(patientIdCustom), api.listRooms()]);
+      setPatients((prev) => prev.map((p) => (p._id === refreshedPatient._id ? refreshedPatient : p)));
+      setRooms(refreshedRooms);
+      showToast(result.bill
+        ? `Discharged — ${result.nights} night(s), ₹${result.bill.totalAmount} room-rent bill issued`
+        : 'Discharged');
+      return result;
+    } catch (err) {
+      showToast(`Couldn't discharge patient: ${err.message}`);
+    }
+  }, [api, showToast]);
 
   const saveConsultation = useCallback(() => {
-    showToast('Consultation saved to patient record');
+    showToast('Consultation saved to patient record (demo only — not yet persisted to the server)');
   }, [showToast]);
 
   const savePrescription = useCallback(() => {
-    showToast('Prescription saved and sent to pharmacy');
+    showToast('Prescription saved and sent to pharmacy (demo only — not yet persisted to the server)');
   }, [showToast]);
 
-  /* ---- Manager / FOS: patient registration ---- */
-  const addPatient = useCallback(async (form) => {
-    const id = form.id || 'P-' + String(patients.length + 1).padStart(3, '0');
-    const newPatient = {
-      id, name: form.name, gender: form.gender, age: Number(form.age) || 0, phone: form.phone,
-      type: form.type || 'OP', lastVisit: new Date().toISOString().slice(0, 10), doctor: form.doctor || '—',
-      vitals: { temp: '—', bp: '—', pulse: '—', resp: '—' }, admitted: false, admissionDays: null, room: null,
-      history: [{ d: 'Today', t: 'Registered', s: `New patient registered${form.registrationFee ? ' — registration charge collected' : ''}.` }],
-    };
-
-    try {
-      const saved = await apiCreatePatient(newPatient);
-      setPatients((prev) => [saved || newPatient, ...prev]);
-      if (form.registrationFee) {
-        setBills((prev) => [...prev, { id: 'B-' + Math.floor(100 + Math.random() * 900), patientId: id, purpose: 'Registration', desc: 'Registration charge', amount: 200, paid: 200, status: 'Paid' }]);
-      }
-      showToast(`Patient ${form.name} registered (${id})`);
-      return saved || newPatient;
-    } catch (err) {
-      setPatients((prev) => [newPatient, ...prev]);
-      showToast(`Patient ${form.name} registered locally (${id})`);
-      return newPatient;
-    }
-  }, [patients.length, showToast]);
-
-  const updatePatient = useCallback(async (patientId, patch) => {
-    try {
-      const updated = await apiUpdatePatient(patientId, patch);
-      setPatients((prev) => prev.map((p) => (p.id === patientId ? { ...p, ...updated } : p)));
-      showToast('Patient updated');
-      return updated;
-    } catch (err) {
-      setPatients((prev) => prev.map((p) => (p.id === patientId ? { ...p, ...patch } : p)));
-      showToast('Patient updated locally');
-      return null;
-    }
-  }, [showToast]);
-
-  const deletePatient = useCallback(async (patientId) => {
-    try {
-      await apiDeletePatient(patientId);
-      setPatients((prev) => prev.filter((p) => p.id !== patientId));
-      showToast('Patient deleted');
-      return true;
-    } catch (err) {
-      showToast('Could not delete patient from server');
-      return false;
-    }
-  }, [showToast]);
-
-  /* ---- Manager / FOS: booking / appointments ---- */
-  const bookAppointment = useCallback((form) => {
-    const patient = patients.find((p) => p.id === form.patientId);
-    const newAppt = {
-      id: 'A-' + Math.floor(100 + Math.random() * 900),
-      time: form.time, date: form.date, patient: patient?.name || 'Unknown', patientId: form.patientId,
-      doctor: form.doctor, status: 'confirmed',
-    };
-    setAppointments((prev) => [...prev, newAppt]);
-    const charges = form.charges || [];
-    if (charges.length > 0) {
-      setBills((prev) => [
-        ...prev,
-        ...charges.map((c, i) => ({
-          id: 'B-' + Math.floor(1000 + Math.random() * 9000) + i, patientId: form.patientId,
-          purpose: c.purpose, desc: c.desc, amount: c.amount, paid: 0, status: 'Pending',
-        })),
-      ]);
-    }
-    setPatients((prev) => prev.map((p) => (p.id === form.patientId ? { ...p, lastVisit: form.date } : p)));
-    const total = charges.reduce((sum, c) => sum + c.amount, 0);
-    showToast(total > 0
-      ? `Appointment booked with ${form.doctor} — ₹${total} added to Payments as pending`
-      : `Appointment booked with ${form.doctor} — no charge due`);
-    return newAppt;
-  }, [patients, showToast]);
-
-  /* ---- Manager only: user (staff) master ---- */
+  /* ---- Manager only: user (staff) master — still local/mock ---- */
   const addUser = useCallback((form) => {
     const id = 'U-' + String(users.length + 1).padStart(3, '0');
     setUsers((prev) => [...prev, { id, name: form.name, designation: form.designation, mobile: form.mobile, email: form.email, status: 'Active' }]);
@@ -285,7 +298,7 @@ export function AppProvider({ children }) {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status: u.status === 'Active' ? 'Archived' : 'Active' } : u)));
   }, []);
 
-  /* ---- Manager only: medicines master ---- */
+  /* ---- Manager only: medicines master — still local/mock ---- */
   const addMedicine = useCallback((form) => {
     const id = 'M-' + String(medicines.length + 1).padStart(3, '0');
     setMedicines((prev) => [...prev, { id, name: form.name, scientificName: form.scientificName, unitCost: Number(form.unitCost), quantity: Number(form.quantity), status: 'Active' }]);
@@ -298,7 +311,7 @@ export function AppProvider({ children }) {
     setMedicines((prev) => prev.map((m) => (m.id === id ? { ...m, status: m.status === 'Active' ? 'Archived' : 'Active' } : m)));
   }, []);
 
-  /* ---- Manager only: procedures master ---- */
+  /* ---- Manager only: procedures master — still local/mock ---- */
   const addProcedure = useCallback((form) => {
     const id = 'PR-' + String(procedures.length + 1).padStart(3, '0');
     setProcedures((prev) => [...prev, { id, name: form.name, description: form.description, unitCost: Number(form.unitCost), status: 'Active' }]);
@@ -311,34 +324,29 @@ export function AppProvider({ children }) {
     setProcedures((prev) => prev.map((p) => (p.id === id ? { ...p, status: p.status === 'Active' ? 'Archived' : 'Active' } : p)));
   }, []);
 
-  /* ---- Rooms (Manager manages master list; FOS allocates via Billing) ---- */
-  const addRoom = useCallback((form) => {
-    const id = 'R-' + form.name.replace(/\D/g, '');
-    setRooms((prev) => [...prev, { id, name: form.name, facilities: form.facilities, perNightCost: Number(form.perNightCost), status: 'Available' }]);
-    showToast(`${form.name} added`);
-  }, [showToast]);
-  const setRoomStatus = useCallback((id, status) => {
-    setRooms((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
-  }, []);
-
   const value = useMemo(() => ({
-    screen, role, activeNav, patients, bills, appointments, users, medicines, procedures, rooms,
+    screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
+    dataLoading, dataError, users, medicines, procedures,
     drawerPatientId, toastMsg, toastVisible, userName, employeeId, token, authLoading,
     currentRole: role ? roleInfo(role) : null,
-    login, register, logout, restoreSession, goToLogin, goToRegister, navigate,
-    openPatient, closeDrawer, markBillPaid, issueBill, saveConsultation, savePrescription, showToast,
-    addPatient, updatePatient, deletePatient, bookAppointment, payments, payPatientId, openPayment, closePayment, recordPayment,
+    login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
+    openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
+    addPatient, bookAppointment, createBill, collectPayment,
+    payBillId, openPayment, closePayment,
+    addRoom, setRoomStatus, admitPatient, dischargePatient,
     addUser, toggleUserStatus,
     addMedicine, updateMedicine, toggleMedicineStatus,
     addProcedure, updateProcedure, toggleProcedureStatus,
-    addRoom, setRoomStatus,
-  }), [screen, role, activeNav, patients, bills, appointments, users, medicines, procedures, rooms,
+  }), [screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
+      dataLoading, dataError, users, medicines, procedures,
       drawerPatientId, toastMsg, toastVisible, userName, employeeId, token, authLoading,
-      login, register, logout, restoreSession, goToLogin, goToRegister, navigate, openPatient, closeDrawer, markBillPaid, issueBill,
-      saveConsultation, savePrescription, showToast, addPatient, updatePatient, deletePatient, bookAppointment,
-      payments, payPatientId, openPayment, closePayment, recordPayment,
+      login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
+      openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
+      addPatient, bookAppointment, createBill, collectPayment,
+      payBillId, openPayment, closePayment,
+      addRoom, setRoomStatus, admitPatient, dischargePatient,
       addUser, toggleUserStatus, addMedicine, updateMedicine, toggleMedicineStatus,
-      addProcedure, updateProcedure, toggleProcedureStatus, addRoom, setRoomStatus]);
+      addProcedure, updateProcedure, toggleProcedureStatus]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

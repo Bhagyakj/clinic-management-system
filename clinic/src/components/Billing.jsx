@@ -1,110 +1,131 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext.jsx';
 
+const today = () => new Date().toISOString().slice(0, 10);
+
 export default function Billing() {
-  const { patients, rooms, navigate, issueBill } = useApp();
-  const availableRooms = rooms.filter((r) => r.status === 'Available');
-  const [patientId, setPatientId] = useState(patients[0]?.id);
-  const [admissionYes, setAdmissionYes] = useState(false); // default: No
-  const [admissionDays, setAdmissionDays] = useState(1);
-  const defaultRoom = availableRooms[0]?.name || rooms.find((r) => r.status === 'Occupied')?.name || '';
-  const [room, setRoom] = useState(defaultRoom);
-
-  const selectedRoom = rooms.find((r) => r.name === room) || null;
-  const roomRate = selectedRoom ? Number(selectedRoom.perNightCost || 0) : 0;
-  const roomCharge = admissionYes && selectedRoom ? roomRate * Math.max(1, Number(admissionDays || 1)) : 0;
-  const roomOptions = rooms.map((r) => ({
-    ...r,
-    label: r.status === 'Available'
-      ? `${r.name} — ₹${r.perNightCost}/night`
-      : `${r.name} — Allocated`,
-    disabled: r.status !== 'Available' && r.name !== room,
-  }));
-
-  const handleIssue = () => {
-    const finalRoom = admissionYes ? room : null;
-    const finalAmount = admissionYes && finalRoom ? roomCharge : 890;
-    issueBill({
-      patientId,
-      admissionYes,
-      admissionDays: admissionYes ? Number(admissionDays) : null,
-      room: finalRoom,
-      amount: finalAmount,
-    });
-    navigate('payments');
-  };
+  const { patients, navigate } = useApp();
+  const [patientId, setPatientId] = useState(patients[0]?._id || '');
+  const patient = patients.find((p) => p._id === patientId);
 
   return (
     <>
       <div className="page-head">
-        <div><h1>Issue bill</h1><div className="desc">Create and issue a bill for a patient visit</div></div>
+        <div><h1>Billing</h1><div className="desc">Issue a bill, or admit a patient to an IP room</div></div>
       </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="field" style={{ maxWidth: 360 }}>
+          <label>Patient</label>
+          <select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
+            {patients.map((p) => <option key={p._id} value={p._id}>{p.name} — {p.id}</option>)}
+          </select>
+        </div>
+      </div>
+
       <div className="grid-2">
-        <div className="card">
-          <h3>Bill details</h3>
-          <div className="form-grid">
-            <div className="field">
-              <label>Patient</label>
-              <select value={patientId} onChange={(e) => setPatientId(e.target.value)}>
-                {patients.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.id}</option>)}
-              </select>
-            </div>
-            <div className="field"><label>Doctor</label><select><option>Dr. Mehta</option><option>Dr. Patel</option></select></div>
-          </div>
-          <table className="bill-table">
-            <tbody>
-              <tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr>
-              <tr><td>Consultation fee</td><td>1</td><td>₹500</td><td>₹500</td></tr>
-              <tr><td>Blood test — CBC</td><td>1</td><td>₹350</td><td>₹350</td></tr>
-              <tr><td>Paracetamol 500mg (10)</td><td>1</td><td>₹40</td><td>₹40</td></tr>
-              <tr className="bill-total-row"><td colSpan={3}>Total</td><td>₹890</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div className="card">
-          <h3>Admission</h3>
-          <div className="field">
-            <label>Admission required?</label>
-            <div className="seg">
-              <button className={!admissionYes ? 'on' : ''} onClick={() => setAdmissionYes(false)}>No</button>
-              <button className={admissionYes ? 'on' : ''} onClick={() => setAdmissionYes(true)}>Yes</button>
-            </div>
-          </div>
-          {admissionYes && (
-            <div className="field">
-              <label>Admission days</label>
-              <input type="number" min={1} value={admissionDays} onChange={(e) => setAdmissionDays(e.target.value)} />
-            </div>
-          )}
-          <div className="field">
-            <label>Room (if admitted)</label>
-            <select disabled={!admissionYes} value={room} onChange={(e) => setRoom(e.target.value)}>
-              {!admissionYes && <option>— Not applicable —</option>}
-              {!admissionYes && <option value="">— Not applicable —</option>}
-              {admissionYes && roomOptions.length === 0 && <option>No rooms available</option>}
-              {admissionYes && roomOptions.map((r) => (
-                <option key={r.id} value={r.name} disabled={r.disabled}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {admissionYes && selectedRoom && (
-            <div className="card" style={{ marginTop: 12, padding: '12px 14px', background: 'var(--surface)' }}>
-              <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>Room charge</div>
-              <div style={{ fontWeight: 700 }}>
-                {selectedRoom.status === 'Available'
-                  ? `${selectedRoom.name} • ₹${selectedRoom.perNightCost} × ${admissionDays} day(s) = ₹${roomCharge}`
-                  : `${selectedRoom.name} • Allocated • ₹${selectedRoom.perNightCost} × ${admissionDays} day(s) = ₹${roomCharge}`}
-              </div>
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn" onClick={() => navigate('dashboard')}>Cancel</button>
-            <button className="btn btn-accent" onClick={handleIssue}>Issue bill</button>
-          </div>
-        </div>
+        <IssueBillCard patient={patient} onDone={() => navigate('payments')} />
+        <AdmissionCard patient={patient} onDone={() => navigate('admissions')} />
       </div>
     </>
+  );
+}
+
+function IssueBillCard({ patient, onDone }) {
+  const { createBill, showToast } = useApp();
+  const [items, setItems] = useState([{ desc: 'Consultation fee', amount: 500 }]);
+  const [submitting, setSubmitting] = useState(false);
+
+  const updateItem = (i, field, val) => setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, [field]: val } : it)));
+  const addItem = () => setItems((prev) => [...prev, { desc: '', amount: 0 }]);
+  const removeItem = (i) => setItems((prev) => prev.filter((_, idx) => idx !== i));
+  const total = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+
+  const submit = async () => {
+    if (!patient) return;
+    const valid = items.filter((it) => it.desc && Number(it.amount) > 0);
+    if (valid.length === 0) { showToast('Add at least one charge with a description and amount'); return; }
+    setSubmitting(true);
+    await createBill(patient._id, valid.map((it) => ({ desc: it.desc, amount: Number(it.amount) })));
+    setSubmitting(false);
+    onDone();
+  };
+
+  return (
+    <div className="card">
+      <h3>Issue bill</h3>
+      <table className="bill-table">
+        <tbody>
+          <tr><th>Item</th><th>Amount</th><th></th></tr>
+          {items.map((it, i) => (
+            <tr key={i}>
+              <td><input type="text" value={it.desc} onChange={(e) => updateItem(i, 'desc', e.target.value)} placeholder="e.g. Blood test — CBC" /></td>
+              <td style={{ width: 110 }}><input type="number" value={it.amount} onChange={(e) => updateItem(i, 'amount', e.target.value)} /></td>
+              <td>{items.length > 1 && <button className="btn btn-sm" onClick={() => removeItem(i)}>✕</button>}</td>
+            </tr>
+          ))}
+          <tr className="bill-total-row"><td colSpan={2}>Total</td><td>₹{total}</td></tr>
+        </tbody>
+      </table>
+      <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={addItem}>+ Add item</button>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <button className="btn btn-accent" disabled={!patient || submitting} onClick={submit}>
+          {submitting ? 'Issuing…' : 'Issue bill'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdmissionCard({ patient, onDone }) {
+  const { rooms, admitPatient, showToast } = useApp();
+  const availableRooms = rooms.filter((r) => r.status === 'available');
+  const [roomId, setRoomId] = useState(availableRooms[0]?._id || '');
+  const [fromDate, setFromDate] = useState(today());
+  const [submitting, setSubmitting] = useState(false);
+  const room = rooms.find((r) => r._id === roomId);
+
+  const submit = async () => {
+    if (!patient || !roomId) return;
+    if (patient.admitted) { showToast(`${patient.name} is already admitted`); return; }
+    setSubmitting(true);
+    await admitPatient({ patientId: patient._id, patientIdCustom: patient.id, roomId, roomNumber: room?.roomNumber, fromDate });
+    setSubmitting(false);
+    onDone();
+  };
+
+  return (
+    <div className="card">
+      <h3>Admission</h3>
+      {patient?.admitted ? (
+        <div className="login-info">
+          {patient.name} is already admitted — Room {patient.room}. Discharge them from the Admissions page before
+          starting a new admission.
+        </div>
+      ) : (
+        <>
+          <div className="field">
+            <label>Room</label>
+            <select value={roomId} onChange={(e) => setRoomId(e.target.value)} disabled={availableRooms.length === 0}>
+              {availableRooms.length === 0 && <option>No rooms currently available</option>}
+              {availableRooms.map((r) => <option key={r._id} value={r._id}>{r.roomNumber} — ₹{r.perNightCost}/night</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>From date</label>
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </div>
+          <p className="split-note">
+            Room rent isn't billed now — it's calculated automatically (nights × per-night cost) and billed when
+            the patient is discharged, from the Admissions page.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+            <button className="btn btn-accent" disabled={!patient || !roomId || submitting} onClick={submit}>
+              {submitting ? 'Admitting…' : 'Admit patient'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
