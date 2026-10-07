@@ -14,24 +14,62 @@ function appointmentsForPatient(patient) {
 }
 
 export default function Patients() {
-  const { role, patients, bills, doctors, dataLoading, showToast, openPatient, navigate, bookAppointment } = useApp();
+  const { role, patients, bills, doctors, dataLoading, showToast, openPatient, navigate, bookAppointment, addPatient, searchTerm } = useApp();
   const [popup, setPopup] = useState(null); // { type: 'appointments' | 'book' | 'payment', patientId }
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState({ name: '', gender: 'Male', age: '', phone: '', type: 'OP', doctor: '' });
   const isFrontDesk = role === 'manager' || role === 'fos';
   const closePopup = () => setPopup(null);
   const active = popup ? patients.find((x) => x._id === popup.patientId) : null;
+
+  const filteredPatients = patients.filter((p) => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+
+    const dateMatches = [
+      p.lastVisit,
+      p.createdAt,
+      ...(p.appointmentHistory || []).map((a) => a.date),
+      ...(p.history || []).map((h) => h.d),
+    ].filter(Boolean).map((value) => String(value).toLowerCase());
+
+    return [p.name, p.phone, p.id, ...dateMatches].some((value) => String(value || '').toLowerCase().includes(q));
+  });
+
+  const handleAddPatient = async (event) => {
+    event.preventDefault();
+    const cleanedName = String(form.name || '').trim();
+    const cleanedPhone = String(form.phone || '').trim();
+    const age = Number(form.age);
+    if (!cleanedName || !cleanedPhone || !Number.isFinite(age) || age <= 0) {
+      showToast('Fill in a valid patient name, age and phone number.');
+      return;
+    }
+    const patient = await addPatient({
+      name: cleanedName,
+      gender: form.gender,
+      age,
+      phone: cleanedPhone,
+      doctor: String(form.doctor || '').trim() || '—',
+      type: form.type,
+    });
+    if (patient) {
+      setShowAddForm(false);
+      setForm({ name: '', gender: 'Male', age: '', phone: '', type: 'OP', doctor: '' });
+    }
+  };
 
   return (
     <>
       <div className="page-head">
         <div><h1>Patients</h1><div className="desc">Search, view and manage patient records</div></div>
-        <button className="btn btn-accent" onClick={() => showToast('Opens add-patient form')}>+ Add patient</button>
+        <button className="btn btn-accent" onClick={() => setShowAddForm(true)}>+ Add patient</button>
       </div>
       <div className="card">
-        <div className="search-box" style={{ width: 280, marginBottom: 16 }}>🔍 Search by name, phone or ID</div>
         {dataLoading && patients.length === 0 ? (
           <div className="popup-empty">Loading patients…</div>
-        ) : patients.length === 0 ? (
-          <div className="popup-empty">No patients yet — add one to get started.</div>
+        ) : filteredPatients.length === 0 ? (
+          <div className="popup-empty">No patients match your search — add one to get started.</div>
         ) : (
           <table>
             <tbody>
@@ -39,7 +77,7 @@ export default function Patients() {
                 <th>ID</th><th>Name</th><th>Gender</th><th>Phone</th><th>Type</th>
                 <th>Admission days</th><th>Payment</th><th>Actions</th>
               </tr>
-              {patients.map((p) => (
+              {filteredPatients.map((p) => (
                 <tr key={p._id}>
                   <td>{p.id}</td>
                   <td><NameLink id={p._id}>{p.name}</NameLink></td>
@@ -68,6 +106,56 @@ export default function Patients() {
           </table>
         )}
       </div>
+
+      {showAddForm && (
+        <div className="popup-overlay" onClick={() => setShowAddForm(false)}>
+          <div className="popup-box" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+            <div className="popup-head">
+              <div><h3>Add patient</h3><div className="sub">Register a new patient record</div></div>
+              <button className="popup-close" onClick={() => setShowAddForm(false)}>✕</button>
+            </div>
+            <form onSubmit={handleAddPatient}>
+              <div className="form-grid">
+                <div className="field full">
+                  <label>Patient name</label>
+                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Enter full name" />
+                </div>
+                <div className="field">
+                  <label>Gender</label>
+                  <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Age</label>
+                  <input type="number" min="0" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="25" />
+                </div>
+                <div className="field">
+                  <label>Phone</label>
+                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="9876543210" />
+                </div>
+                <div className="field">
+                  <label>Type</label>
+                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                    <option value="OP">OP</option>
+                    <option value="IP">IP</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Doctor</label>
+                  <input value={form.doctor} onChange={(e) => setForm({ ...form, doctor: e.target.value })} placeholder="Assigned doctor" />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+                <button type="button" className="btn" onClick={() => setShowAddForm(false)}>Cancel</button>
+                <button type="submit" className="btn btn-accent">Save patient</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {popup && active && (
         <div className="popup-overlay" onClick={closePopup}>

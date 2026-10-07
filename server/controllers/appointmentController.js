@@ -11,7 +11,11 @@ function toDateString(d) {
 // your human-readable `id` (e.g. "P-001") — resolvePatient() handles both.
 export const bookAppointment = async (req, res) => {
   try {
-    const { patientId, doctorId, date, time, notes } = req.body;
+    const { patientId, doctorId, date, time, notes } = req.body || {};
+
+    if (!patientId || !doctorId || !date || !time) {
+      return res.status(400).json({ message: 'patientId, doctorId, date and time are required' });
+    }
 
     const patient = await resolvePatient(patientId);
     if (!patient) return res.status(404).json({ message: 'Patient not found' });

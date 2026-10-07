@@ -30,7 +30,37 @@ const buildPatientPayload = (body) => {
 
 export const getPatients = async (req, res) => {
   try {
-    const patients = await Patient.find().sort({ createdAt: -1 });
+    const { search, id, date } = req.query;
+    let patients = await Patient.find().sort({ createdAt: -1 });
+
+    if (search) {
+      const q = String(search).trim().toLowerCase();
+      patients = patients.filter((p) => {
+        const fields = [
+          p.name,
+          p.id,
+          p.phone,
+          p.lastVisit,
+          ...(p.appointmentHistory || []).map((a) => a.date),
+          ...(p.history || []).map((h) => h.d),
+        ];
+        return fields.some((value) => String(value || '').toLowerCase().includes(q));
+      });
+    }
+
+    if (id) {
+      const q = String(id).trim().toLowerCase();
+      patients = patients.filter((p) => String(p.id).toLowerCase().includes(q));
+    }
+
+    if (date) {
+      const q = String(date).trim();
+      patients = patients.filter((p) => {
+        const patientDates = [p.lastVisit, ...(p.appointmentHistory || []).map((a) => a.date), ...(p.history || []).map((h) => h.d)];
+        return patientDates.some((value) => String(value || '').includes(q));
+      });
+    }
+
     res.json(patients);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -49,15 +79,27 @@ export const getPatientById = async (req, res) => {
 
 export const createPatient = async (req, res) => {
   try {
-    const payload = buildPatientPayload(req.body || {});
+    const body = req.body || {};
+    const normalizedPhone = String(body.phone || '').trim();
+    const normalizedName = String(body.name || '').trim();
+    const payload = buildPatientPayload({
+      ...body,
+      name: normalizedName,
+      phone: normalizedPhone,
+    });
 
     if (!payload.name || !payload.gender || !payload.age || !payload.phone) {
       return res.status(400).json({ message: 'Name, gender, age and phone are required' });
     }
 
-    const existing = await Patient.findOne({ $or: [{ id: payload.id }, { phone: payload.phone }] });
-    if (existing) {
-      return res.status(400).json({ message: 'Patient already exists with that ID or phone number' });
+    const existingByPhone = await Patient.findOne({ phone: payload.phone });
+    if (existingByPhone) {
+      return res.status(400).json({ message: 'A patient with this phone number is already registered. Please use a different phone number or open the existing record.' });
+    }
+
+    const existingById = await Patient.findOne({ id: payload.id });
+    if (existingById) {
+      return res.status(400).json({ message: 'Patient ID already exists. Please try again.' });
     }
 
     const patient = new Patient(payload);

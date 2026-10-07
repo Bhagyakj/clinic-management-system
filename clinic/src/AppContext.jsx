@@ -37,6 +37,7 @@ export function AppProvider({ children }) {
   // Payments page to collect each one individually.
   const [payBillId, setPayBillId] = useState(null);
   const [drawerPatientId, setDrawerPatientId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
@@ -146,7 +147,11 @@ export function AppProvider({ children }) {
     if (!api) return;
     try {
       const patient = await api.createPatient({
-        name: form.name, gender: form.gender, age: form.age, phone: form.phone, doctor: form.doctor || '—',
+        name: String(form.name || '').trim(),
+        gender: form.gender,
+        age: form.age,
+        phone: String(form.phone || '').trim(),
+        doctor: form.doctor || '—',
       });
       setPatients((prev) => [patient, ...prev]);
       if (form.registrationFee) {
@@ -157,13 +162,17 @@ export function AppProvider({ children }) {
       showToast(`Patient ${form.name} registered (${patient.id})`);
       return patient;
     } catch (err) {
-      showToast(`Couldn't register patient: ${err.message}`);
+      showToast(err?.message ? `Couldn't register patient: ${err.message}` : 'Couldn\'t register patient. Check the form and try again.');
     }
   }, [api, showToast]);
 
   /* ---- Appointments: real API ---- */
   const bookAppointment = useCallback(async (form) => {
     if (!api) return;
+    if (!form || !form.patientId || !form.doctorId || !form.date || !form.time) {
+      showToast('Select a patient, doctor, date and time before booking.');
+      return;
+    }
     try {
       const appt = await api.bookAppointment({
         patientId: form.patientId, doctorId: form.doctorId, date: form.date, time: form.time, notes: form.notes,
@@ -327,7 +336,7 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
     dataLoading, dataError, users, medicines, procedures,
-    drawerPatientId, toastMsg, toastVisible, userName, employeeId, token, authLoading,
+    drawerPatientId, searchTerm, setSearchTerm, toastMsg, toastVisible, userName, employeeId, token, authLoading,
     currentRole: role ? roleInfo(role) : null,
     login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
     openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
@@ -339,7 +348,7 @@ export function AppProvider({ children }) {
     addProcedure, updateProcedure, toggleProcedureStatus,
   }), [screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
       dataLoading, dataError, users, medicines, procedures,
-      drawerPatientId, toastMsg, toastVisible, userName, employeeId, token, authLoading,
+      drawerPatientId, searchTerm, toastMsg, toastVisible, userName, employeeId, token, authLoading,
       login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
       openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
       addPatient, bookAppointment, createBill, collectPayment,
