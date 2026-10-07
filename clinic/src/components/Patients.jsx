@@ -8,68 +8,30 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 // Your Patient schema keeps appointmentHistory directly on the patient
 // document (updated server-side by bookAppointment), so no merging with a
-// separate appointments list is needed anymore — this just sorts it.
+// separate appointments list is needed — this just sorts it.
 function appointmentsForPatient(patient) {
   return [...(patient.appointmentHistory || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 export default function Patients() {
-  const { role, patients, bills, doctors, dataLoading, showToast, openPatient, navigate, bookAppointment, addPatient, searchTerm } = useApp();
-  const [popup, setPopup] = useState(null); // { type: 'appointments' | 'book' | 'payment', patientId }
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState({ name: '', gender: 'Male', age: '', phone: '', type: 'OP', doctor: '' });
+  const { role, patients, bills, doctors, dataLoading, showToast, openPatient, navigate, bookAppointment } = useApp();
+  const [popup, setPopup] = useState(null); // { type: 'add' | 'appointments' | 'book' | 'payment', patientId? }
   const isFrontDesk = role === 'manager' || role === 'fos';
   const closePopup = () => setPopup(null);
-  const active = popup ? patients.find((x) => x._id === popup.patientId) : null;
-
-  const filteredPatients = patients.filter((p) => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return true;
-
-    const dateMatches = [
-      p.lastVisit,
-      p.createdAt,
-      ...(p.appointmentHistory || []).map((a) => a.date),
-      ...(p.history || []).map((h) => h.d),
-    ].filter(Boolean).map((value) => String(value).toLowerCase());
-
-    return [p.name, p.phone, p.id, ...dateMatches].some((value) => String(value || '').toLowerCase().includes(q));
-  });
-
-  const handleAddPatient = async (event) => {
-    event.preventDefault();
-    const cleanedName = String(form.name || '').trim();
-    const cleanedPhone = String(form.phone || '').trim();
-    const age = Number(form.age);
-    if (!cleanedName || !cleanedPhone || !Number.isFinite(age) || age <= 0) {
-      showToast('Fill in a valid patient name, age and phone number.');
-      return;
-    }
-    const patient = await addPatient({
-      name: cleanedName,
-      gender: form.gender,
-      age,
-      phone: cleanedPhone,
-      doctor: String(form.doctor || '').trim() || '—',
-      type: form.type,
-    });
-    if (patient) {
-      setShowAddForm(false);
-      setForm({ name: '', gender: 'Male', age: '', phone: '', type: 'OP', doctor: '' });
-    }
-  };
+  const active = popup?.patientId ? patients.find((x) => x._id === popup.patientId) : null;
 
   return (
     <>
       <div className="page-head">
         <div><h1>Patients</h1><div className="desc">Search, view and manage patient records</div></div>
-        <button className="btn btn-accent" onClick={() => setShowAddForm(true)}>+ Add patient</button>
+        <button className="btn btn-accent" onClick={() => setPopup({ type: 'add' })}>+ Add patient</button>
       </div>
       <div className="card">
+        <div className="search-box" style={{ width: 280, marginBottom: 16 }}>🔍 Search by name, phone or ID</div>
         {dataLoading && patients.length === 0 ? (
           <div className="popup-empty">Loading patients…</div>
-        ) : filteredPatients.length === 0 ? (
-          <div className="popup-empty">No patients match your search — add one to get started.</div>
+        ) : patients.length === 0 ? (
+          <div className="popup-empty">No patients yet — add one to get started.</div>
         ) : (
           <table>
             <tbody>
@@ -77,7 +39,7 @@ export default function Patients() {
                 <th>ID</th><th>Name</th><th>Gender</th><th>Phone</th><th>Type</th>
                 <th>Admission days</th><th>Payment</th><th>Actions</th>
               </tr>
-              {filteredPatients.map((p) => (
+              {patients.map((p) => (
                 <tr key={p._id}>
                   <td>{p.id}</td>
                   <td><NameLink id={p._id}>{p.name}</NameLink></td>
@@ -107,52 +69,10 @@ export default function Patients() {
         )}
       </div>
 
-      {showAddForm && (
-        <div className="popup-overlay" onClick={() => setShowAddForm(false)}>
-          <div className="popup-box" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <div className="popup-head">
-              <div><h3>Add patient</h3><div className="sub">Register a new patient record</div></div>
-              <button className="popup-close" onClick={() => setShowAddForm(false)}>✕</button>
-            </div>
-            <form onSubmit={handleAddPatient}>
-              <div className="form-grid">
-                <div className="field full">
-                  <label>Patient name</label>
-                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Enter full name" />
-                </div>
-                <div className="field">
-                  <label>Gender</label>
-                  <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Age</label>
-                  <input type="number" min="0" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="25" />
-                </div>
-                <div className="field">
-                  <label>Phone</label>
-                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="9876543210" />
-                </div>
-                <div className="field">
-                  <label>Type</label>
-                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                    <option value="OP">OP</option>
-                    <option value="IP">IP</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>Doctor</label>
-                  <input value={form.doctor} onChange={(e) => setForm({ ...form, doctor: e.target.value })} placeholder="Assigned doctor" />
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
-                <button type="button" className="btn" onClick={() => setShowAddForm(false)}>Cancel</button>
-                <button type="submit" className="btn btn-accent">Save patient</button>
-              </div>
-            </form>
+      {popup?.type === 'add' && (
+        <div className="popup-overlay" onClick={closePopup}>
+          <div className="popup-box" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <AddPatientPopup onClose={closePopup} />
           </div>
         </div>
       )}
@@ -183,12 +103,62 @@ export default function Patients() {
   );
 }
 
-function Head({ title, p, onClose }) {
+function Head({ title, p, onClose, sub }) {
   return (
     <div className="popup-head">
-      <div><h3>{title}</h3><div className="sub">{p.name} • {p.id}</div></div>
+      <div><h3>{title}</h3><div className="sub">{sub || (p && `${p.name} • ${p.id}`)}</div></div>
       <button className="popup-close" onClick={onClose}>✕</button>
     </div>
+  );
+}
+
+// The actual Add Patient form — restored as a popup, wired to the real
+// addPatient() in AppContext.jsx (POST /api/patients, plus an optional
+// Registration bill that's immediately collected).
+function AddPatientPopup({ onClose }) {
+  const { addPatient, showToast } = useApp();
+  const [form, setForm] = useState({ name: '', gender: 'Female', age: '', phone: '', doctor: '', registrationFee: true });
+  const [submitting, setSubmitting] = useState(false);
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.gender || !form.age || !form.phone.trim()) {
+      showToast('Name, gender, age and phone are all required');
+      return;
+    }
+    setSubmitting(true);
+    const patient = await addPatient({
+      name: form.name.trim(), gender: form.gender, age: Number(form.age), phone: form.phone.trim(),
+      doctor: form.doctor.trim() || undefined, registrationFee: form.registrationFee,
+    });
+    setSubmitting(false);
+    if (patient) onClose();
+  };
+
+  return (
+    <form onSubmit={submit}>
+      <Head title="Add patient" sub="New patient registration" onClose={onClose} />
+      <div className="form-grid">
+        <div className="field full"><label>Full name</label><input type="text" value={form.name} onChange={set('name')} placeholder="e.g. Anita Sharma" /></div>
+        <div className="field">
+          <label>Gender</label>
+          <select value={form.gender} onChange={set('gender')}>
+            <option>Female</option><option>Male</option><option>Other</option>
+          </select>
+        </div>
+        <div className="field"><label>Age</label><input type="number" min={0} value={form.age} onChange={set('age')} placeholder="e.g. 34" /></div>
+        <div className="field full"><label>Phone</label><input type="text" value={form.phone} onChange={set('phone')} placeholder="10-digit mobile number" /></div>
+        <div className="field full"><label>Doctor (optional)</label><input type="text" value={form.doctor} onChange={set('doctor')} placeholder="e.g. Dr. Mehta" /></div>
+      </div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '4px 0 14px' }}>
+        <input type="checkbox" checked={form.registrationFee} onChange={(e) => setForm((f) => ({ ...f, registrationFee: e.target.checked }))} />
+        Collect ₹200 registration fee now
+      </label>
+      <button type="submit" className="btn btn-accent" style={{ width: '100%' }} disabled={submitting}>
+        {submitting ? 'Registering…' : 'Register patient'}
+      </button>
+    </form>
   );
 }
 
