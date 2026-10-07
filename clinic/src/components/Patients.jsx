@@ -107,7 +107,7 @@ function Head({ title, p, onClose, sub }) {
   return (
     <div className="popup-head">
       <div><h3>{title}</h3><div className="sub">{sub || (p && `${p.name} • ${p.id}`)}</div></div>
-      <button className="popup-close" onClick={onClose}>✕</button>
+      <button type="button" className="popup-close" onClick={onClose}>✕</button>
     </div>
   );
 }
@@ -123,7 +123,14 @@ function AddPatientPopup({ onClose }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.gender || !form.age || !form.phone.trim()) {
+    if (
+      !form.name.trim() ||
+      !form.gender ||
+      form.age === '' ||
+      !Number.isFinite(Number(form.age)) ||
+      Number(form.age) < 0 ||
+      !form.phone.trim()
+    ) {
       showToast('Name, gender, age and phone are all required');
       return;
     }
