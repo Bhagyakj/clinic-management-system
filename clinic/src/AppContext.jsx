@@ -177,6 +177,13 @@ export function AppProvider({ children }) {
       const appt = await api.bookAppointment({
         patientId: form.patientId, doctorId: form.doctorId, date: form.date, time: form.time, notes: form.notes,
       });
+      const doctor = doctors.find((d) => d._id === form.doctorId) || { _id: form.doctorId, name: form.doctor || 'Doctor' };
+      const normalizedAppointment = {
+        ...appt,
+        doctorId: typeof appt.doctorId === 'object' && appt.doctorId
+          ? appt.doctorId
+          : { _id: doctor._id, name: doctor.name, specialization: doctor.specialization || '' },
+      };
       const charges = form.charges || [];
       const createdBills = [];
       for (const c of charges) {
@@ -187,7 +194,7 @@ export function AppProvider({ children }) {
       // server — refetch just this one patient rather than the whole list.
       const refreshed = await api.getPatient(form.patientIdCustom);
       setPatients((prev) => prev.map((p) => (p._id === refreshed._id ? refreshed : p)));
-      setAppointments((prev) => [appt, ...prev]);
+      setAppointments((prev) => [normalizedAppointment, ...prev]);
       if (createdBills.length) setBills((prev) => [...createdBills, ...prev]);
       const total = charges.reduce((sum, c) => sum + c.amount, 0);
       showToast(total > 0
@@ -197,7 +204,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       showToast(`Couldn't book appointment: ${err.message}`);
     }
-  }, [api, showToast]);
+  }, [api, doctors, showToast]);
 
   /* ---- Billing: real API ---- */
   const createBill = useCallback(async (patientId, items) => {

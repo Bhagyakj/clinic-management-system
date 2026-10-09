@@ -1,15 +1,34 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../AppContext.jsx';
 import { appointmentCharges } from '../data.js';
 import { NameLink, Badge } from './Shared.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const getDoctorId = (appointment) => {
+  if (!appointment?.doctorId) return '';
+  if (typeof appointment.doctorId === 'string') return appointment.doctorId;
+  if (typeof appointment.doctorId === 'object') return appointment.doctorId._id || '';
+  return '';
+};
+
+const getDoctorName = (appointment, doctors) => {
+  if (appointment?.doctorId && typeof appointment.doctorId === 'object' && appointment.doctorId.name) {
+    return appointment.doctorId.name;
+  }
+  const doctor = doctors.find((d) => d._id === getDoctorId(appointment));
+  if (doctor?.name) return doctor.name;
+  if (appointment?.doctor) return appointment.doctor;
+  return '—';
+};
+
 export default function Appointments() {
   const { patients, doctors, bills, appointments, dataLoading, navigate, bookAppointment } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [patientId, setPatientId] = useState(patients[0]?._id || '');
   const [doctorId, setDoctorId] = useState(doctors[0]?._id || '');
+  const [selectedDoctorId, setSelectedDoctorId] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
   const [date, setDate] = useState(today());
   const [time, setTime] = useState('09:00 AM');
 
@@ -17,6 +36,12 @@ export default function Appointments() {
   const doctor = doctors.find((d) => d._id === doctorId);
   const { charges, note } = patient ? appointmentCharges(patient, bills, date) : { charges: [], note: '' };
   const total = charges.reduce((sum, c) => sum + c.amount, 0);
+
+  const filteredAppointments = useMemo(() => appointments.filter((a) => {
+    const matchesDoctor = selectedDoctorId === 'all' || getDoctorId(a) === selectedDoctorId;
+    const matchesStatus = selectedStatus === 'all' || String(a.status || '').toLowerCase() === selectedStatus;
+    return matchesDoctor && matchesStatus;
+  }), [appointments, selectedDoctorId, selectedStatus]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -73,25 +98,41 @@ export default function Appointments() {
 
       <div className="card">
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-          <select style={{ padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 }}><option>All doctors</option></select>
-          <select style={{ padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 }}><option>All statuses</option></select>
+          <select
+            value={selectedDoctorId}
+            onChange={(e) => setSelectedDoctorId(e.target.value)}
+            style={{ padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 }}
+          >
+            <option value="all">All doctors</option>
+            {doctors.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </select>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            style={{ padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 }}
+          >
+            <option value="all">All statuses</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
         </div>
         {dataLoading && appointments.length === 0 ? (
           <div className="popup-empty">Loading…</div>
-        ) : appointments.length === 0 ? (
-          <div className="popup-empty">No appointments booked yet.</div>
+        ) : filteredAppointments.length === 0 ? (
+          <div className="popup-empty">No appointments match the selected filters.</div>
         ) : (
           <table>
             <tbody>
               <tr><th>Date</th><th>Time</th><th>Patient</th><th>Doctor</th><th>Status</th><th>Actions</th></tr>
-              {appointments.map((a) => {
+              {filteredAppointments.map((a) => {
                 const p = patients.find((x) => x._id === a.patientId);
                 return (
                   <tr key={a._id}>
                     <td>{a.date ? new Date(a.date).toLocaleDateString() : '—'}</td>
                     <td>{a.time}</td>
                     <td>{p ? <NameLink id={p._id}>{p.name}</NameLink> : '—'}</td>
-                    <td>{a.doctorId?.name || '—'}</td>
+                    <td>{getDoctorName(a, doctors)}</td>
                     <td><Badge status={a.status} /></td>
                     <td><button className="btn btn-sm" onClick={() => navigate('consultation')}>View</button></td>
                   </tr>

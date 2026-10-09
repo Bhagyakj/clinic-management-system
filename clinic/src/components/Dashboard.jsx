@@ -67,7 +67,7 @@ function ManagerBody() {
 }
 
 function FosBody() {
-  const { patients, bills, appointments, navigate, openPayment, showToast } = useApp();
+  const { patients, doctors, bills, appointments, navigate, openPayment, showToast } = useApp();
   const pendingBills = bills.filter((b) => b.status !== 'paid');
   return (
     <>
@@ -95,12 +95,16 @@ function FosBody() {
                 <tr><th>Date</th><th>Time</th><th>Patient</th><th>Doctor</th><th>Status</th></tr>
                 {appointments.slice(0, 8).map((a) => {
                   const patient = patients.find((p) => p._id === a.patientId);
+                  const doctorId = typeof a.doctorId === 'string' ? a.doctorId : a.doctorId?._id;
+                  const doctorName = a.doctorId && typeof a.doctorId === 'object' && a.doctorId.name
+                    ? a.doctorId.name
+                    : doctors.find((d) => d._id === doctorId)?.name || a.doctor || '—';
                   return (
                     <tr key={a._id}>
                       <td>{a.date ? new Date(a.date).toLocaleDateString() : '—'}</td>
                       <td>{a.time}</td>
                       <td>{patient ? <NameLink id={patient._id}>{patient.name}</NameLink> : '—'}</td>
-                      <td>{a.doctorId?.name || '—'}</td>
+                      <td>{doctorName}</td>
                       <td><Badge status={a.status} /></td>
                     </tr>
                   );
