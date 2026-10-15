@@ -178,7 +178,7 @@ function JdocBody() {
                       <td>{a.time}</td>
                       <td>{patient ? <NameLink id={patient._id}>{patient.name}</NameLink> : '—'}</td>
                       <td><Badge status={a.status} /></td>
-                      <td><button className="btn btn-sm" onClick={() => navigate('consultation')}>View</button></td>
+                      <td><button className="btn btn-sm" onClick={() => navigate('consultation', patient?._id || a.patientId)}>View</button></td>
                     </tr>
                   );
                 })}

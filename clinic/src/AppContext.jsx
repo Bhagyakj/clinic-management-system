@@ -140,10 +140,10 @@ export function AppProvider({ children }) {
     setScreen('login');
   }, []);
 
-  const navigate = useCallback((navKey) => {
+  const navigate = useCallback((navKey, patientId = null) => {
     setActiveNav(navKey);
-    if (navKey === 'consultation' && drawerPatientId) {
-      setConsultationPatientId(drawerPatientId);
+    if (navKey === 'consultation') {
+      setConsultationPatientId(patientId || drawerPatientId || null);
     }
   }, [drawerPatientId]);
   const openPatient = useCallback((id) => {
@@ -370,6 +370,22 @@ export function AppProvider({ children }) {
         history: [{ d: new Date().toISOString().slice(0, 10), t: 'Consultation', s: `${consultation.doctorName} recorded the latest patient assessment.` }, ...history],
       });
 
+      const appointmentToComplete = [...appointments]
+        .filter((appointment) => {
+          const samePatient = appointment.patientId && (
+            String(appointment.patientId) === String(patient._id)
+            || String(appointment.patientId) === String(patient.id)
+          );
+          const notCancelled = String(appointment.status || '').toLowerCase() !== 'cancelled';
+          return samePatient && notCancelled;
+        })
+        .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())[0];
+
+      if (appointmentToComplete) {
+        const updatedAppointment = await api.updateAppointmentStatus(appointmentToComplete._id, 'completed');
+        setAppointments((prev) => prev.map((appointment) => (appointment._id === updatedAppointment._id ? updatedAppointment : appointment)));
+      }
+
       const refreshed = await api.getPatient(patient.id);
       setPatients((prev) => prev.map((p) => (p._id === patient._id ? refreshed : p)));
       showToast('Consultation saved successfully');
@@ -378,7 +394,7 @@ export function AppProvider({ children }) {
       showToast(err.message || 'Could not save consultation.');
       return null;
     }
-  }, [api, consultationPatientId, patients, userName, employeeId, showToast]);
+  }, [api, appointments, consultationPatientId, patients, userName, employeeId, showToast]);
 
   const savePrescription = useCallback(async (payload = null) => {
     if (!api) return null;

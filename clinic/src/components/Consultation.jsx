@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../AppContext.jsx';
+import { normalizeDoctorUserId } from '../utils/doctorVisibility.js';
 
 const TABS = ['Vitals', 'Complaints', 'Observations', 'Diagnosis Notes'];
 
 export default function Consultation() {
-  const { role, navigate, saveConsultation, patients, consultationPatientId, userName } = useApp();
+  const { role, navigate, saveConsultation, patients, consultationPatientId, userName, reportingDoctorId, doctors } = useApp();
   const [tab, setTab] = useState('Vitals');
   const isSenior = role === 'sdoc';
   const isJunior = role === 'jdoc';
@@ -38,10 +39,25 @@ export default function Consultation() {
 
   const userNameText = String(userName || '').trim();
   const patientDoctorText = String(patient?.doctor || '').trim();
-  const patientMatchesCurrentSenior = !patientDoctorText || patientDoctorText === userNameText
-    || patientDoctorText.toLowerCase().includes(userNameText.toLowerCase())
-    || userNameText.toLowerCase().includes(patientDoctorText.toLowerCase());
-  const canRecord = isSenior || (isJunior && patientMatchesCurrentSenior);
+
+  const assignedSeniorName = useMemo(() => {
+    if (!reportingDoctorId) return '';
+    const seniorDoctor = doctors.find((doctor) => normalizeDoctorUserId(doctor?.userId) === normalizeDoctorUserId(reportingDoctorId));
+    return String(seniorDoctor?.name || '').trim();
+  }, [doctors, reportingDoctorId]);
+
+  const equalsNameMatch = (a, b) => {
+    const first = String(a || '').trim();
+    const second = String(b || '').trim();
+    if (!first || !second) return false;
+    return first === second
+      || first.toLowerCase().includes(second.toLowerCase())
+      || second.toLowerCase().includes(first.toLowerCase());
+  };
+
+  const patientMatchesCurrentDoctor = !patientDoctorText || equalsNameMatch(patientDoctorText, userNameText);
+  const patientMatchesAssignedSenior = !!assignedSeniorName && equalsNameMatch(patientDoctorText, assignedSeniorName);
+  const canRecord = isSenior || (isJunior && (patientMatchesCurrentDoctor || patientMatchesAssignedSenior));
   const hasRequiredVitals = ['temp', 'bp', 'pulse', 'resp'].every((field) => String(form[field] ?? '').trim() !== '');
   const hasRequiredNotes = ['complaints', 'observations', 'diagnosis'].every((field) => String(form[field] ?? '').trim() !== '');
   const canSave = canRecord && hasRequiredVitals && hasRequiredNotes;

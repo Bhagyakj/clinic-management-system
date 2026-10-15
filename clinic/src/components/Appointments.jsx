@@ -1,7 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../AppContext.jsx';
 import { appointmentCharges } from '../data.js';
-import { filterAppointmentsForUser, getSeniorDoctors, getVisibleDoctorIdsForUser } from '../utils/doctorVisibility.js';
+import {
+  appointmentMatchesFilters,
+  filterAppointmentsForUser,
+  getSeniorDoctors,
+  getVisibleDoctorIdsForUser,
+  normalizeAppointmentDateKey,
+  normalizeAppointmentTimeKey,
+} from '../utils/doctorVisibility.js';
 import { NameLink, Badge } from './Shared.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -69,13 +76,11 @@ export default function Appointments() {
     [role, currentUserId, userName, reportingDoctorId, doctors, appointments]
   );
 
-  const filteredAppointments = useMemo(() => roleScopedAppointments.filter((a) => {
-    const appDate = a.date ? new Date(a.date).toISOString().slice(0, 10) : '';
-    const matchesDoctor = selectedDoctorId === 'all' || getDoctorId(a) === selectedDoctorId;
-    const matchesStatus = selectedStatus === 'all' || String(a.status || '').toLowerCase() === selectedStatus;
-    const matchesDate = !selectedDate || appDate === selectedDate;
-    return matchesDoctor && matchesStatus && matchesDate;
-  }), [roleScopedAppointments, selectedDoctorId, selectedStatus, selectedDate]);
+  const filteredAppointments = useMemo(() => roleScopedAppointments.filter((a) => appointmentMatchesFilters(a, {
+    selectedDoctorId,
+    selectedStatus,
+    selectedDate,
+  })), [roleScopedAppointments, selectedDoctorId, selectedStatus, selectedDate]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -83,8 +88,8 @@ export default function Appointments() {
 
     const duplicate = appointments.some((a) => {
       const sameDoctor = getDoctorId(a) === doctorId;
-      const sameDate = a.date ? new Date(a.date).toISOString().slice(0, 10) === date : false;
-      const sameTime = String(a.time || '').trim().toLowerCase() === String(time || '').trim().toLowerCase();
+      const sameDate = normalizeAppointmentDateKey(a.date) === normalizeAppointmentDateKey(date);
+      const sameTime = normalizeAppointmentTimeKey(a.time) === normalizeAppointmentTimeKey(time);
       return sameDoctor && sameDate && sameTime && String(a.status || '').toLowerCase() !== 'cancelled';
     });
 
@@ -189,7 +194,7 @@ export default function Appointments() {
                     <td>{p ? <NameLink id={p._id}>{p.name}</NameLink> : '—'}</td>
                     <td>{getDoctorName(a, doctors)}</td>
                     <td><Badge status={a.status} /></td>
-                    <td><button className="btn btn-sm" onClick={() => navigate('consultation')}>View</button></td>
+                    <td><button className="btn btn-sm" onClick={() => navigate('consultation', p?._id || a.patientId)}>View</button></td>
                   </tr>
                 );
               })}
