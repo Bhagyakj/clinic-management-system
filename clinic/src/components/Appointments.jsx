@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../AppContext.jsx';
 import { appointmentCharges } from '../data.js';
+import { filterAppointmentsForUser, getSeniorDoctors, getVisibleDoctorIdsForUser } from '../utils/doctorVisibility.js';
 import { NameLink, Badge } from './Shared.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -23,29 +24,75 @@ const getDoctorName = (appointment, doctors) => {
 };
 
 export default function Appointments() {
-  const { patients, doctors, bills, appointments, dataLoading, navigate, bookAppointment } = useApp();
+  const { patients, doctors, bills, appointments, dataLoading, navigate, bookAppointment, role, userName, currentUserId, reportingDoctorId } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [patientId, setPatientId] = useState(patients[0]?._id || '');
   const [doctorId, setDoctorId] = useState(doctors[0]?._id || '');
   const [selectedDoctorId, setSelectedDoctorId] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(today());
   const [date, setDate] = useState(today());
   const [time, setTime] = useState('09:00 AM');
+  const bookingDoctors = useMemo(() => (role === 'fos' || role === 'manager' ? getSeniorDoctors(doctors) : doctors), [role, doctors]);
+
+  const visibleDoctorIds = useMemo(
+    () => getVisibleDoctorIdsForUser({ role, userId: currentUserId, userName, reportingDoctorId, doctors }),
+    [role, currentUserId, userName, reportingDoctorId, doctors]
+  );
+  const visibleDoctors = useMemo(
+    () => doctors.filter((doctor) => visibleDoctorIds.includes(doctor._id)),
+    [doctors, visibleDoctorIds]
+  );
+
+  React.useEffect(() => {
+    if (role === 'sdoc' || role === 'jdoc') {
+      const current = visibleDoctors[0]?._id || '';
+      if (current) {
+        setSelectedDoctorId(current);
+        setDoctorId(current);
+      }
+      return;
+    }
+    setSelectedDoctorId('all');
+    if (bookingDoctors.length > 0 && !bookingDoctors.some((d) => d._id === doctorId)) {
+      setDoctorId(bookingDoctors[0]._id);
+    }
+  }, [role, visibleDoctors, bookingDoctors, doctorId]);
 
   const patient = patients.find((p) => p._id === patientId);
   const doctor = doctors.find((d) => d._id === doctorId);
   const { charges, note } = patient ? appointmentCharges(patient, bills, date) : { charges: [], note: '' };
   const total = charges.reduce((sum, c) => sum + c.amount, 0);
 
-  const filteredAppointments = useMemo(() => appointments.filter((a) => {
+  const roleScopedAppointments = useMemo(
+    () => filterAppointmentsForUser({ role, userId: currentUserId, userName, reportingDoctorId, doctors, appointments }),
+    [role, currentUserId, userName, reportingDoctorId, doctors, appointments]
+  );
+
+  const filteredAppointments = useMemo(() => roleScopedAppointments.filter((a) => {
+    const appDate = a.date ? new Date(a.date).toISOString().slice(0, 10) : '';
     const matchesDoctor = selectedDoctorId === 'all' || getDoctorId(a) === selectedDoctorId;
     const matchesStatus = selectedStatus === 'all' || String(a.status || '').toLowerCase() === selectedStatus;
-    return matchesDoctor && matchesStatus;
-  }), [appointments, selectedDoctorId, selectedStatus]);
+    const matchesDate = !selectedDate || appDate === selectedDate;
+    return matchesDoctor && matchesStatus && matchesDate;
+  }), [roleScopedAppointments, selectedDoctorId, selectedStatus, selectedDate]);
 
   const submit = async (e) => {
     e.preventDefault();
     if (!patient || !doctor) return;
+
+    const duplicate = appointments.some((a) => {
+      const sameDoctor = getDoctorId(a) === doctorId;
+      const sameDate = a.date ? new Date(a.date).toISOString().slice(0, 10) === date : false;
+      const sameTime = String(a.time || '').trim().toLowerCase() === String(time || '').trim().toLowerCase();
+      return sameDoctor && sameDate && sameTime && String(a.status || '').toLowerCase() !== 'cancelled';
+    });
+
+    if (duplicate) {
+      alert(`This doctor is already booked on ${new Date(date).toLocaleDateString()} at ${time}. Please choose another slot.`);
+      return;
+    }
+
     await bookAppointment({ patientId: patient._id, patientIdCustom: patient.id, doctorId, doctor: doctor.name, date, time, charges });
     setShowForm(false);
   };
@@ -69,8 +116,8 @@ export default function Appointments() {
               </select>
             </div>
             <div className="field"><label>Doctor</label>
-              <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-                {doctors.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+              <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} disabled={role === 'sdoc' || role === 'jdoc'}>
+                {(role === 'sdoc' || role === 'jdoc' ? visibleDoctors : bookingDoctors).map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
               </select>
             </div>
             <div className="field"><label>Date</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
@@ -97,15 +144,23 @@ export default function Appointments() {
       )}
 
       <div className="card">
-        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-          <select
-            value={selectedDoctorId}
-            onChange={(e) => setSelectedDoctorId(e.target.value)}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          {(role === 'manager' || role === 'fos') && (
+            <select
+              value={selectedDoctorId}
+              onChange={(e) => setSelectedDoctorId(e.target.value)}
+              style={{ padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 }}
+            >
+              <option value="all">All doctors</option>
+              {doctors.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
+            </select>
+          )}
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
             style={{ padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 }}
-          >
-            <option value="all">All doctors</option>
-            {doctors.map((d) => <option key={d._id} value={d._id}>{d.name}</option>)}
-          </select>
+          />
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}

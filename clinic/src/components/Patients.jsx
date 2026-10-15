@@ -14,11 +14,20 @@ function appointmentsForPatient(patient) {
 }
 
 export default function Patients() {
-  const { role, patients, bills, doctors, dataLoading, showToast, openPatient, navigate, bookAppointment } = useApp();
+  const { role, patients, bills, doctors, appointments, dataLoading, showToast, openPatient, navigate, bookAppointment, searchTerm, setSearchTerm } = useApp();
   const [popup, setPopup] = useState(null); // { type: 'add' | 'appointments' | 'book' | 'payment', patientId? }
   const isFrontDesk = role === 'manager' || role === 'fos';
   const closePopup = () => setPopup(null);
   const active = popup?.patientId ? patients.find((x) => x._id === popup.patientId) : null;
+
+  const filteredPatients = React.useMemo(() => {
+    const value = String(searchTerm || '').trim().toLowerCase();
+    if (!value) return patients;
+    return patients.filter((p) => {
+      const haystack = [p.name, p.phone, p.id].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(value);
+    });
+  }, [patients, searchTerm]);
 
   return (
     <>
@@ -27,11 +36,20 @@ export default function Patients() {
         <button className="btn btn-accent" onClick={() => setPopup({ type: 'add' })}>+ Add patient</button>
       </div>
       <div className="card">
-        <div className="search-box" style={{ width: 280, marginBottom: 16 }}>🔍 Search by name, phone or ID</div>
+        <label className="search-box" style={{ width: 280, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>🔍</span>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by name, phone or ID"
+            style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%' }}
+          />
+        </label>
         {dataLoading && patients.length === 0 ? (
           <div className="popup-empty">Loading patients…</div>
-        ) : patients.length === 0 ? (
-          <div className="popup-empty">No patients yet — add one to get started.</div>
+        ) : filteredPatients.length === 0 ? (
+          <div className="popup-empty">No patients match your search.</div>
         ) : (
           <table>
             <tbody>
@@ -39,7 +57,7 @@ export default function Patients() {
                 <th>ID</th><th>Name</th><th>Gender</th><th>Phone</th><th>Type</th>
                 <th>Admission days</th><th>Payment</th><th>Actions</th>
               </tr>
-              {patients.map((p) => (
+              {filteredPatients.map((p) => (
                 <tr key={p._id}>
                   <td>{p.id}</td>
                   <td><NameLink id={p._id}>{p.name}</NameLink></td>
@@ -91,7 +109,7 @@ export default function Patients() {
             )}
             {popup.type === 'book' && (
               <BookPopup
-                p={active} bills={bills} doctors={doctors}
+                p={active} bills={bills} doctors={doctors} appointments={appointments}
                 onClose={closePopup}
                 onBook={(form) => { bookAppointment(form); closePopup(); }}
               />
@@ -210,33 +228,48 @@ function DuePopup({ p, bills, onClose, onPay }) {
   );
 }
 
-function BookPopup({ p, bills, doctors, onClose, onBook }) {
-  const [doctorId, setDoctorId] = useState(doctors[0]?._id || '');
+function BookPopup({ p, bills, doctors, appointments = [], onClose, onBook }) {
+  const seniorDoctors = doctors.filter((doctor) => {
+    const designation = doctor?.userId?.designation || '';
+    const name = String(doctor?.name || '').toLowerCase();
+    return designation === 'Senior Doctor' || name.includes('senior') || name.includes('(sd)');
+  });
+  const bookingDoctors = seniorDoctors.length > 0 ? seniorDoctors : doctors;
+  const [doctorId, setDoctorId] = useState(bookingDoctors[0]?._id || '');
   const [date, setDate] = useState(today());
   const [time, setTime] = useState(TIME_SLOTS[0]);
   const { charges, note } = appointmentCharges(p, bills, date);
   const total = charges.reduce((sum, c) => sum + c.amount, 0);
-  const doctor = doctors.find((d) => d._id === doctorId);
+  const doctor = bookingDoctors.find((d) => d._id === doctorId);
+  const busyTimes = appointments
+    .filter((a) => {
+      const sameDoctor = String(a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId || '') === String(doctorId);
+      const sameDate = a.date ? new Date(a.date).toISOString().slice(0, 10) === date : false;
+      return sameDoctor && sameDate && String(a.status || '').toLowerCase() !== 'cancelled';
+    })
+    .map((a) => String(a.time || ''));
 
   return (
     <>
       <Head title="Book appointment" p={p} onClose={onClose} />
-      {doctors.length === 0 && (
+      {bookingDoctors.length === 0 && (
         <div className="login-error" style={{ marginBottom: 14 }}>
-          No doctors found. A Manager needs to link a doctor's user account via POST /api/doctors first.
+          No senior doctors found. A Manager needs to link a doctor's user account via POST /api/doctors first.
         </div>
       )}
       <div className="form-grid">
         <div className="field">
           <label>Doctor</label>
           <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-            {doctors.map((d) => <option key={d._id} value={d._id}>{d.name}{d.specialization ? ` — ${d.specialization}` : ''}</option>)}
+            {bookingDoctors.map((d) => <option key={d._id} value={d._id}>{d.name}{d.specialization ? ` — ${d.specialization}` : ''}</option>)}
           </select>
         </div>
         <div className="field">
           <label>Time</label>
           <select value={time} onChange={(e) => setTime(e.target.value)}>
-            {TIME_SLOTS.map((t) => <option key={t}>{t}</option>)}
+            {TIME_SLOTS.map((t) => (
+              <option key={t} value={t} disabled={busyTimes.includes(t)}>{t}{busyTimes.includes(t) ? ' • booked' : ''}</option>
+            ))}
           </select>
         </div>
         <div className="field full">

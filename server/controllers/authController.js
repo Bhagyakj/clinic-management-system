@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mySuperSecretKey123';
 // Register
 export const register = async (req, res) => {
   try {
-    const { EmployeeId, name, designation, password } = req.body;
+    const { EmployeeId, name, designation, password, reportingDoctorId } = req.body;
     if (!EmployeeId || !name || !designation || !password) {
       return res.status(400).json({ message: 'EmployeeId, name, designation and password are all required' });
     }
@@ -15,7 +15,13 @@ export const register = async (req, res) => {
     if (existing) return res.status(400).json({ message: 'EmployeeId already exists' });
 
     const hash = await bcrypt.hash(password, 10);
-    const user = new User({ EmployeeId, name, designation, passwordHash: hash });
+    const user = new User({
+      EmployeeId,
+      name,
+      designation,
+      passwordHash: hash,
+      reportingDoctorId: reportingDoctorId || undefined,
+    });
     await user.save();
 
     res.status(201).json({ message: 'User registered successfully' });
@@ -35,12 +41,19 @@ export const login = async (req, res) => {
     if (!valid) return res.status(401).json({ message: 'Invalid password' });
 
     const token = jwt.sign(
-      { id: user._id, role: user.designation },
+      { id: user._id, role: user.designation, reportingDoctorId: user.reportingDoctorId },
       JWT_SECRET,
       { expiresIn: '8h' }
     );
 
-    res.json({ token, role: user.designation, name: user.name, employeeId: user.EmployeeId });
+    res.json({
+      token,
+      role: user.designation,
+      name: user.name,
+      employeeId: user.EmployeeId,
+      userId: user._id.toString(),
+      reportingDoctorId: user.reportingDoctorId ? user.reportingDoctorId.toString() : null,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

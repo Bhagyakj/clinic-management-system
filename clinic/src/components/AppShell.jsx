@@ -5,6 +5,7 @@ import Dashboard from './Dashboard.jsx';
 import Patients from './Patients.jsx';
 import Appointments from './Appointments.jsx';
 import Consultation from './Consultation.jsx';
+import History from './History.jsx';
 import Prescription from './Prescription.jsx';
 import Billing from './Billing.jsx';
 import Payments from './Payments.jsx';
@@ -63,6 +64,7 @@ function PageRouter({ navKey }) {
     case 'patients': return <Patients />;
     case 'appointments': return <Appointments />;
     case 'consultation': return <Consultation />;
+    case 'history': return <History />;
     case 'prescription': return <Prescription />;
     case 'billing': return <Billing />;
     case 'payments': return <Payments />;

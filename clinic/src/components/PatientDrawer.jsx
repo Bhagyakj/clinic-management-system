@@ -4,7 +4,7 @@ import { billsForPatient, patientPayStatus, billBalance } from '../data.js';
 import { PayBadge } from './Shared.jsx';
 
 export default function PatientDrawer() {
-  const { patients, bills, drawerPatientId, closeDrawer, navigate, openPayment } = useApp();
+  const { patients, bills, drawerPatientId, closeDrawer, navigate, openPayment, setConsultationPatientId } = useApp();
   const open = Boolean(drawerPatientId);
   const p = patients.find((x) => x._id === drawerPatientId);
 
@@ -66,8 +66,35 @@ export default function PatientDrawer() {
                 ))}
               </div>
 
+              <div className="drawer-section">
+                <h4>Medicines &amp; procedures</h4>
+                {(p.prescriptions || []).length === 0 && (p.procedures || []).length === 0 ? (
+                  <div className="popup-empty">No prescriptions or procedures recorded yet.</div>
+                ) : (
+                  <>
+                    {(p.prescriptions || []).map((entry, i) => (
+                      <div className="history-entry" key={`rx-${i}`}>
+                        <div className="d">{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : 'Date not recorded'}</div>
+                        <div className="t">{entry.doctorName || 'Doctor'}</div>
+                        <div className="s">
+                          {entry.medicines?.map((m) => `${m.name} (${m.dosage})`).join(', ') || 'No medicines'}
+                          {entry.notes ? ` • ${entry.notes}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                    {(p.procedures || []).map((entry, i) => (
+                      <div className="history-entry" key={`proc-${i}`}>
+                        <div className="d">{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : 'Date not recorded'}</div>
+                        <div className="t">{entry.name || 'Procedure'}</div>
+                        <div className="s">{entry.instructions || 'No instructions recorded'}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+
               <div className="drawer-section" style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn-accent btn-sm" onClick={() => { closeDrawer(); navigate('consultation'); }}>Start consultation</button>
+                <button className="btn btn-accent btn-sm" onClick={() => { setConsultationPatientId(p._id); closeDrawer(); navigate('consultation'); }}>Start consultation</button>
                 <button className="btn btn-sm" onClick={() => { closeDrawer(); navigate('billing'); }}>Issue bill</button>
               </div>
             </div>

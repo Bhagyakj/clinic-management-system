@@ -12,6 +12,8 @@ export function AppProvider({ children }) {
   const [role, setRole] = useState(null);
   const [userName, setUserName] = useState('');
   const [employeeId, setEmployeeId] = useState('');
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [reportingDoctorId, setReportingDoctorId] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('mf_token') || '');
   const [authLoading, setAuthLoading] = useState(false);
   const [activeNav, setActiveNav] = useState('dashboard');
@@ -37,6 +39,7 @@ export function AppProvider({ children }) {
   // Payments page to collect each one individually.
   const [payBillId, setPayBillId] = useState(null);
   const [drawerPatientId, setDrawerPatientId] = useState(null);
+  const [consultationPatientId, setConsultationPatientId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
@@ -80,6 +83,8 @@ export function AppProvider({ children }) {
       setRole(roleId);
       setUserName(data.name);
       setEmployeeId(data.employeeId || empId);
+      setCurrentUserId(data.userId || '');
+      setReportingDoctorId(data.reportingDoctorId || null);
       setActiveNav('dashboard');
       setScreen('app');
       await loadAllData(authed(data.token));
@@ -115,6 +120,8 @@ export function AppProvider({ children }) {
       setRole(roleId);
       setUserName(me.name);
       setEmployeeId(me.EmployeeId);
+      setCurrentUserId(me._id || '');
+      setReportingDoctorId(me.reportingDoctorId || null);
       setActiveNav('dashboard');
       setScreen('app');
       await loadAllData(authed(saved));
@@ -128,13 +135,21 @@ export function AppProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('mf_token');
-    setToken(''); setRole(null); setUserName(''); setEmployeeId('');
+    setToken(''); setRole(null); setUserName(''); setEmployeeId(''); setCurrentUserId(''); setReportingDoctorId(null);
     setPatients([]); setDoctors([]); setAppointments([]); setBills([]); setRooms([]); setAdmissions([]);
     setScreen('login');
   }, []);
 
-  const navigate = useCallback((navKey) => setActiveNav(navKey), []);
-  const openPatient = useCallback((id) => setDrawerPatientId(id), []);
+  const navigate = useCallback((navKey) => {
+    setActiveNav(navKey);
+    if (navKey === 'consultation' && drawerPatientId) {
+      setConsultationPatientId(drawerPatientId);
+    }
+  }, [drawerPatientId]);
+  const openPatient = useCallback((id) => {
+    setDrawerPatientId(id);
+    setConsultationPatientId(id);
+  }, []);
   const closeDrawer = useCallback(() => setDrawerPatientId(null), []);
   const openPayment = useCallback((billId) => setPayBillId(billId), []);
   const closePayment = useCallback(() => setPayBillId(null), []);
@@ -296,13 +311,121 @@ export function AppProvider({ children }) {
     }
   }, [api, showToast]);
 
-  const saveConsultation = useCallback(() => {
-    showToast('Consultation saved to patient record (demo only — not yet persisted to the server)');
-  }, [showToast]);
+  const saveConsultation = useCallback(async (formData = null) => {
+    if (!api) return;
+    const patient = patients.find((p) => p._id === consultationPatientId) || patients[0];
+    if (!patient) {
+      showToast('Select a patient before saving a consultation.');
+      return;
+    }
 
-  const savePrescription = useCallback(() => {
-    showToast('Prescription saved and sent to pharmacy (demo only — not yet persisted to the server)');
-  }, [showToast]);
+    const payload = formData || {
+      temp: patient.vitals?.temp || '',
+      bp: patient.vitals?.bp || '',
+      pulse: patient.vitals?.pulse || '',
+      resp: patient.vitals?.resp || '',
+      weight: patient.vitals?.weight || '',
+      height: patient.vitals?.height || '',
+      complaints: '',
+      observations: '',
+      diagnosis: '',
+    };
+
+    const requiredVitals = ['temp', 'bp', 'pulse', 'resp'];
+    const requiredNotes = ['complaints', 'observations', 'diagnosis'];
+    const hasVitals = requiredVitals.every((field) => String(payload[field] ?? '').trim() !== '');
+    const hasNotes = requiredNotes.every((field) => String(payload[field] ?? '').trim() !== '');
+
+    if (!hasVitals || !hasNotes) {
+      showToast('Complete all vitals, complaints, observations, and diagnosis notes before saving.');
+      return null;
+    }
+
+    const consultation = {
+      createdAt: new Date().toISOString(),
+      doctorId: employeeId || 'unknown',
+      doctorName: userName || 'Doctor',
+      assignedSeniorName: patient.doctor || '—',
+      vitals: {
+        temp: String(payload.temp ?? patient.vitals?.temp ?? '—'),
+        bp: String(payload.bp ?? patient.vitals?.bp ?? '—'),
+        pulse: String(payload.pulse ?? patient.vitals?.pulse ?? '—'),
+        resp: String(payload.resp ?? patient.vitals?.resp ?? '—'),
+        weight: String(payload.weight ?? patient.vitals?.weight ?? '—'),
+        height: String(payload.height ?? patient.vitals?.height ?? '—'),
+      },
+      complaints: String(payload.complaints || '').trim(),
+      observations: String(payload.observations || '').trim(),
+      diagnosis: String(payload.diagnosis || '').trim(),
+      status: payload.status || 'Open',
+    };
+
+    const prior = Array.isArray(patient.consultations) ? patient.consultations : [];
+    const history = Array.isArray(patient.history) ? patient.history : [];
+
+    try {
+      await api.updatePatient(patient.id, {
+        vitals: consultation.vitals,
+        consultations: [consultation, ...prior],
+        history: [{ d: new Date().toISOString().slice(0, 10), t: 'Consultation', s: `${consultation.doctorName} recorded the latest patient assessment.` }, ...history],
+      });
+
+      const refreshed = await api.getPatient(patient.id);
+      setPatients((prev) => prev.map((p) => (p._id === patient._id ? refreshed : p)));
+      showToast('Consultation saved successfully');
+      return refreshed;
+    } catch (err) {
+      showToast(err.message || 'Could not save consultation.');
+      return null;
+    }
+  }, [api, consultationPatientId, patients, userName, employeeId, showToast]);
+
+  const savePrescription = useCallback(async (payload = null) => {
+    if (!api) return null;
+    const patient = patients.find((p) => p._id === consultationPatientId) || patients[0];
+    if (!patient) {
+      showToast('Select a patient before saving a prescription.');
+      return null;
+    }
+
+    const meds = Array.isArray(payload?.medicines) ? payload.medicines.filter((m) => m.name && m.dosage) : [];
+    const procedures = Array.isArray(payload?.procedures) ? payload.procedures.filter((p) => p.name || p.instructions) : [];
+    const notes = String(payload?.notes || '').trim();
+
+    if (meds.length === 0 && procedures.length === 0 && !notes) {
+      showToast('Add at least one medicine, one procedure, or a note before saving.');
+      return null;
+    }
+
+    const updated = await api.updatePatient(patient.id, {
+      prescriptions: [
+        {
+          createdAt: new Date().toISOString(),
+          doctorName: userName || 'Doctor',
+          medicines: meds,
+          notes,
+        },
+        ...(Array.isArray(patient.prescriptions) ? patient.prescriptions : []),
+      ],
+      procedures: [
+        ...procedures.map((item) => ({
+          createdAt: new Date().toISOString(),
+          doctorName: userName || 'Doctor',
+          name: item.name || '',
+          instructions: item.instructions || '',
+        })),
+        ...(Array.isArray(patient.procedures) ? patient.procedures : []),
+      ],
+      history: [
+        { d: new Date().toISOString().slice(0, 10), t: 'Prescription', s: `${userName || 'Doctor'} prescribed additional medicines/procedures.` },
+        ...(Array.isArray(patient.history) ? patient.history : []),
+      ],
+    });
+
+    setPatients((prev) => prev.map((p) => (p._id === patient._id ? { ...p, ...updated } : p)));
+    showToast('Prescription saved successfully');
+    return updated;
+  }, [api, consultationPatientId, patients, userName, showToast]);
 
   /* ---- Manager only: user (staff) master — still local/mock ---- */
   const addUser = useCallback((form) => {
@@ -343,7 +466,7 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
     dataLoading, dataError, users, medicines, procedures,
-    drawerPatientId, searchTerm, setSearchTerm, toastMsg, toastVisible, userName, employeeId, token, authLoading,
+    drawerPatientId, consultationPatientId, setConsultationPatientId, searchTerm, setSearchTerm, toastMsg, toastVisible, userName, employeeId, currentUserId, reportingDoctorId, token, authLoading,
     currentRole: role ? roleInfo(role) : null,
     login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
     openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
@@ -355,7 +478,7 @@ export function AppProvider({ children }) {
     addProcedure, updateProcedure, toggleProcedureStatus,
   }), [screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
       dataLoading, dataError, users, medicines, procedures,
-      drawerPatientId, searchTerm, toastMsg, toastVisible, userName, employeeId, token, authLoading,
+      drawerPatientId, consultationPatientId, searchTerm, toastMsg, toastVisible, userName, employeeId, currentUserId, reportingDoctorId, token, authLoading,
       login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
       openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
       addPatient, bookAppointment, createBill, collectPayment,

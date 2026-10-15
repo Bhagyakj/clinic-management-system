@@ -22,6 +22,20 @@ export const bookAppointment = async (req, res) => {
     const doctor = await Doctor.findById(doctorId);
     if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
 
+    const targetDate = new Date(date);
+    const existing = await Appointment.findOne({
+      doctorId,
+      date: targetDate,
+      time,
+      status: { $ne: 'cancelled' },
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        message: `This doctor already has an appointment for ${new Date(date).toISOString().slice(0, 10)} at ${time}. Please choose another time.`,
+      });
+    }
+
     const appointment = await Appointment.create({
       patientId: patient._id, doctorId, date, time, notes, status: 'confirmed',
     });

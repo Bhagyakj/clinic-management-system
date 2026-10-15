@@ -17,7 +17,12 @@ const buildPatientPayload = (body) => {
       bp: body.vitals?.bp || "—",
       pulse: body.vitals?.pulse || "—",
       resp: body.vitals?.resp || "—",
+      weight: body.vitals?.weight || "—",
+      height: body.vitals?.height || "—",
     },
+    consultations: Array.isArray(body.consultations) ? body.consultations : [],
+    prescriptions: Array.isArray(body.prescriptions) ? body.prescriptions : [],
+    procedures: Array.isArray(body.procedures) ? body.procedures : [],
     admitted: Boolean(body.admitted),
     admissionDays: body.admissionDays ?? null,
     room: body.room || null,
@@ -144,6 +149,21 @@ export const updatePatient = async (req, res) => {
     if (updates.age !== undefined) updates.age = Number(updates.age);
     if (updates.vitals)
       updates.vitals = { ...patient.vitals, ...updates.vitals };
+    if (updates.consultations) {
+      updates.consultations = Array.isArray(updates.consultations)
+        ? updates.consultations
+        : [updates.consultations];
+    }
+    if (updates.prescriptions) {
+      updates.prescriptions = Array.isArray(updates.prescriptions)
+        ? updates.prescriptions
+        : [updates.prescriptions];
+    }
+    if (updates.procedures) {
+      updates.procedures = Array.isArray(updates.procedures)
+        ? updates.procedures
+        : [updates.procedures];
+    }
 
     const updated = await Patient.findOneAndUpdate(
       { id: req.params.id },

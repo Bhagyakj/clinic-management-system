@@ -99,7 +99,7 @@ export default function Register() {
                   setEmployeeId(e.target.value);
                   setError("");
                 }}
-                placeholder="e.g. HSP-2001"
+                placeholder="e.g. HSP-2011"
               />
             </div>
             <div className="field">

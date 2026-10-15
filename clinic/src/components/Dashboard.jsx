@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../AppContext.jsx';
 import { pendingBillsCount, patientPayStatus, billBalance } from '../data.js';
+import { filterAppointmentsForUser } from '../utils/doctorVisibility.js';
 import { StatCard, QuickAction, NameLink, Badge, PayBadge, Donut } from './Shared.jsx';
 
 export default function Dashboard() {
@@ -145,22 +146,31 @@ function FosBody() {
 }
 
 function JdocBody() {
-  const { navigate, appointments, patients } = useApp();
+  const { navigate, appointments, patients, role, currentUserId, userName, reportingDoctorId, doctors } = useApp();
+  const visibleAppointments = filterAppointmentsForUser({
+    role,
+    userId: currentUserId,
+    userName,
+    reportingDoctorId,
+    doctors,
+    appointments,
+  });
+
   return (
     <>
       <div className="stat-grid">
-        <StatCard label="Appointments" value={appointments.length} delta="all time" />
-        <StatCard label="Confirmed" value={appointments.filter((a) => a.status === 'confirmed').length} delta="awaiting consult" />
-        <StatCard label="Completed" value={appointments.filter((a) => a.status === 'completed').length} delta="all time" />
+        <StatCard label="Appointments" value={visibleAppointments.length} delta="assigned today" />
+        <StatCard label="Confirmed" value={visibleAppointments.filter((a) => a.status === 'confirmed').length} delta="awaiting consult" />
+        <StatCard label="Completed" value={visibleAppointments.filter((a) => a.status === 'completed').length} delta="all time" />
       </div>
       <div className="grid-2">
         <div className="card">
           <h3>Appointments</h3>
-          {appointments.length === 0 ? <div className="popup-empty">No appointments booked yet.</div> : (
+          {visibleAppointments.length === 0 ? <div className="popup-empty">No appointments booked yet.</div> : (
             <table>
               <tbody>
                 <tr><th>Date</th><th>Time</th><th>Patient</th><th>Status</th><th></th></tr>
-                {appointments.slice(0, 8).map((a) => {
+                {visibleAppointments.slice(0, 8).map((a) => {
                   const patient = patients.find((p) => p._id === a.patientId);
                   return (
                     <tr key={a._id}>

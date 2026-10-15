@@ -39,7 +39,7 @@ export default function Login() {
             <input
               type="text" value={employeeId} autoComplete="username"
               onChange={(e) => { setEmployeeId(e.target.value); setError(''); }}
-              placeholder="e.g. HSP-2001"
+              placeholder="e.g. HSP-2011"
             />
           </div>
 

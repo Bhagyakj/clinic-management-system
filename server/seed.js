@@ -12,11 +12,22 @@ const PASSWORD = 'test1234'; // same password for every seeded account — chang
 const USERS = [
   { EmployeeId: 'HSP-2291', name: 'Dr. John', designation: 'Manager' },
   { EmployeeId: 'HSP-1001', name: 'Meera Nair', designation: 'Front Office Staff' },
-  { EmployeeId: 'HSP-2001', name: 'Dr. Arjun Rao', designation: 'Junior Doctor', specialization: 'General Medicine', department: 'OPD' },
-  { EmployeeId: 'HSP-2002', name: 'Dr. Kavita Menon', designation: 'Senior Doctor', specialization: 'Internal Medicine', department: 'OPD' },
+  { EmployeeId: 'HSP-2005', name: 'Dr. Kavita Menon (SD)', designation: 'Senior Doctor', specialization: 'Internal Medicine', department: 'OPD' },
+  { EmployeeId: 'HSP-2003', name: 'Dr. Rahul Sharma (SD)', designation: 'Senior Doctor', specialization: 'Cardiology', department: 'OPD' },
+  { EmployeeId: 'HSP-2011', name: 'Dr. Arjun Rao (JD)', designation: 'Junior Doctor', specialization: 'General Medicine', department: 'OPD' },
+  { EmployeeId: 'HSP-2012', name: 'Dr. Nisha Verma (JD)', designation: 'Junior Doctor', specialization: 'General Medicine', department: 'OPD' },
+  { EmployeeId: 'HSP-2013', name: 'Dr. Amit Joshi (JD)', designation: 'Junior Doctor', specialization: 'Family Medicine', department: 'OPD' },
+  { EmployeeId: 'HSP-2014', name: 'Dr. Sneha Iyer (JD)', designation: 'Junior Doctor', specialization: 'Pediatrics', department: 'OPD' },
   { EmployeeId: 'HSP-3001', name: 'Sr. Lissy Thomas', designation: 'Nurse' },
   { EmployeeId: 'HSP-4001', name: 'Ravi Kumar', designation: 'Pharmacist' },
 ];
+
+const JUNIOR_TO_SENIOR = {
+  'HSP-2011': 'HSP-2005',
+  'HSP-2012': 'HSP-2005',
+  'HSP-2013': 'HSP-2003',
+  'HSP-2014': 'HSP-2003',
+};
 
 const ROOMS = [
   { roomNumber: '101', type: 'general', capacity: 1, perNightCost: 1500, facilities: ['TV', 'AC'] },
@@ -35,9 +46,12 @@ async function run() {
   await mongoose.connect(MONGO_URI);
   console.log('Connected to', MONGO_URI);
 
+  // Remove stale old junior-doctor ID if it was used before with a different password.
+  await User.deleteMany({ EmployeeId: 'HSP-2001' });
+
   const hash = await bcrypt.hash(PASSWORD, 10);
 
-  // Users (+ Doctor profiles for the two doctor designations)
+  // Users (+ Doctor profiles for the doctor designations)
   for (const u of USERS) {
     let user = await User.findOne({ EmployeeId: u.EmployeeId });
     if (!user) {
@@ -45,6 +59,17 @@ async function run() {
       console.log('Created user', u.EmployeeId, u.designation);
     } else {
       console.log('User already exists', u.EmployeeId);
+    }
+
+    if (user.designation === 'Junior Doctor') {
+      const seniorEmployeeId = JUNIOR_TO_SENIOR[user.EmployeeId];
+      if (seniorEmployeeId) {
+        const seniorUser = await User.findOne({ EmployeeId: seniorEmployeeId });
+        if (seniorUser && (!user.reportingDoctorId || user.reportingDoctorId.toString() !== seniorUser._id.toString())) {
+          user.reportingDoctorId = seniorUser._id;
+          await user.save();
+        }
+      }
     }
 
     if (/Doctor/.test(u.designation)) {
