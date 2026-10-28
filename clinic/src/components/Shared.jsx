@@ -2,8 +2,19 @@ import React from 'react';
 import { useApp } from '../AppContext.jsx';
 
 export function Badge({ status }) {
-  const map = { confirmed: 'Confirmed', waiting: 'Waiting', completed: 'Completed', progress: 'In Progress', pending: 'Pending', stable: 'Stable', recovering: 'Recovering', monitoring: 'Monitoring' };
-  return <span className={`badge ${status}`}>{map[status] || status}</span>;
+  const normalized = String(status || '').toLowerCase();
+  const map = {
+    new: 'New',
+    confirmed: 'Confirmed',
+    waiting: 'Waiting',
+    completed: 'Completed',
+    progress: 'In Progress',
+    pending: 'Pending',
+    stable: 'Stable',
+    recovering: 'Recovering',
+    monitoring: 'Monitoring',
+  };
+  return <span className={`badge ${normalized}`}>{map[normalized] || status || '—'}</span>;
 }
 
 export function PayBadge({ status }) {

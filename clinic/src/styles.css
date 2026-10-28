@@ -207,6 +207,7 @@ tr:last-child td{border-bottom:none;}
 .name-link{color:var(--ink);font-weight:600;background:none;border:none;padding:0;font-size:13px;cursor:pointer;}
 .name-link:hover{color:var(--role-accent);text-decoration:underline;}
 .badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
+.badge.new{background:var(--blue-soft);color:var(--blue);}
 .badge.confirmed{background:var(--good-soft);color:var(--good);}
 .badge.waiting{background:var(--warn-soft);color:var(--warn);}
 .badge.completed{background:#E7ECFB;color:#3A4EA8;}

@@ -28,7 +28,7 @@ export const NAV = {
   fos: [['dashboard', '📊', 'Dashboard'], ['patients', '🧑‍🤝‍🧑', 'Patients'], ['appointments', '📅', 'Appointments'], ['billing', '🧮', 'Billing'], ['payments', '💳', 'Payments'], ['admissions', '🛏️', 'Admissions'], ['reports', '📈', 'Reports']],
   jdoc: [['dashboard', '📊', 'Dashboard'], ['appointments', '📅', 'Appointments'], ['consultation', '📝', 'Consultation'], ['patients', '🧑‍🤝‍🧑', 'Patients'], ['reports', '📈', 'Reports']],
   sdoc: [['dashboard', '📊', 'Dashboard'], ['patients', '🧑‍🤝‍🧑', 'Patients'], ['consultation', '📝', 'Consultation'], ['prescription', '💊', 'Prescription'], ['history', '🕘', 'History'], ['reports', '📈', 'Reports']],
-  nurse: [['dashboard', '📊', 'Dashboard'], ['ip', '🛏️', 'IP Patients'], ['medicines', '💊', 'Medicines'], ['procedures', '🧾', 'Procedures'], ['reports', '📈', 'Reports']],
+  nurse: [['dashboard', '📊', 'Dashboard'], ['ip', '🛏️', 'IP Patients'], ['nurse-charges', '💊', 'Nurse Charges'], ['medicines', '💊', 'Medicines'], ['procedures', '🧾', 'Procedures'], ['reports', '📈', 'Reports']],
   pharm: [['dashboard', '📊', 'Dashboard'], ['prescriptions', '📝', 'Prescriptions'], ['pharmbills', '🧮', 'Pharmacy Bills'], ['medicines', '💊', 'Medicines'], ['reports', '📈', 'Reports']],
 };
 
@@ -36,7 +36,7 @@ export const PAGE_TITLES = {
   dashboard: 'Dashboard', users: 'Users', medicines: 'Medicines', procedures: 'Procedures', rooms: 'Rooms',
   payments: 'Payments', billing: 'Billing', reports: 'Reports', settings: 'Settings', patients: 'Patients',
   appointments: 'Appointments', admissions: 'Admissions', consultation: 'Consultation', prescription: 'Prescription',
-  history: 'History', ip: 'IP Patients', prescriptions: 'Prescriptions', pharmbills: 'Pharmacy Bills',
+  history: 'History', ip: 'IP Patients', 'nurse-charges': 'Nurse Charges', nurseCharges: 'Nurse Charges', prescriptions: 'Prescriptions', pharmbills: 'Pharmacy Bills',
 };
 
 /* ===================================================================

@@ -63,6 +63,16 @@ export function authed(token) {
         "/patients",
         auth({ method: "POST", body: JSON.stringify(body) }),
       ),
+    addNurseCharge: (patientId, body) =>
+      request(
+        `/patients/${patientId}/charges`,
+        auth({ method: "POST", body: JSON.stringify(body) }),
+      ),
+    convertPendingNurseCharges: (patientId) =>
+      request(
+        `/patients/${patientId}/convert-charges`,
+        auth({ method: "POST" }),
+      ),
     updatePatient: (id, body) =>
       request(
         `/patients/${id}`,
@@ -111,6 +121,24 @@ export function authed(token) {
         `/rooms/${id}/status`,
         auth({ method: "PATCH", body: JSON.stringify({ status }) }),
       ),
+
+    // Medicines
+    listMedicines: (query = "") => request(`/medicines${query}`, auth()),
+    createMedicine: (body) =>
+      request("/medicines", auth({ method: "POST", body: JSON.stringify(body) })),
+    updateMedicine: (id, body) =>
+      request(`/medicines/${id}`, auth({ method: "PUT", body: JSON.stringify(body) })),
+    toggleMedicineStatus: (id) =>
+      request(`/medicines/${id}/status`, auth({ method: "PATCH" })),
+
+    // Procedures
+    listProcedures: (query = "") => request(`/procedures${query}`, auth()),
+    createProcedure: (body) =>
+      request("/procedures", auth({ method: "POST", body: JSON.stringify(body) })),
+    updateProcedure: (id, body) =>
+      request(`/procedures/${id}`, auth({ method: "PUT", body: JSON.stringify(body) })),
+    toggleProcedureStatus: (id) =>
+      request(`/procedures/${id}/status`, auth({ method: "PATCH" })),
 
     // Admissions
     listAdmissions: () => request("/admissions", auth()),

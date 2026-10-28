@@ -172,6 +172,7 @@ export default function Appointments() {
             style={{ padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13 }}
           >
             <option value="all">All statuses</option>
+            <option value="new">New</option>
             <option value="confirmed">Confirmed</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>

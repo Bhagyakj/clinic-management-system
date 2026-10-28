@@ -13,6 +13,21 @@ function appointmentsForPatient(patient) {
   return [...(patient.appointmentHistory || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
+function getConsultationStatus(patient) {
+  const consultations = Array.isArray(patient?.consultations) ? patient.consultations : [];
+  if (consultations.length === 0) return { label: 'New', status: 'new' };
+
+  const latest = consultations
+    .slice()
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+
+  const latestDate = latest?.createdAt ? new Date(latest.createdAt) : null;
+  if (!latestDate || Number.isNaN(latestDate.getTime())) return { label: 'New', status: 'new' };
+
+  const diffDays = (Date.now() - latestDate.getTime()) / 86400000;
+  return diffDays <= 7 ? { label: 'New', status: 'new' } : { label: 'Stable', status: 'stable' };
+}
+
 export default function Patients() {
   const { role, patients, bills, doctors, appointments, dataLoading, showToast, openPatient, navigate, bookAppointment, searchTerm, setSearchTerm } = useApp();
   const [popup, setPopup] = useState(null); // { type: 'add' | 'appointments' | 'book' | 'payment', patientId? }
@@ -28,6 +43,8 @@ export default function Patients() {
       return haystack.includes(value);
     });
   }, [patients, searchTerm]);
+
+  const showSeniorDoctorColumns = role === 'sdoc';
 
   return (
     <>
@@ -55,33 +72,44 @@ export default function Patients() {
             <tbody>
               <tr>
                 <th>ID</th><th>Name</th><th>Gender</th><th>Phone</th><th>Type</th>
+                {showSeniorDoctorColumns && <th>Consultation date</th>}
+                {showSeniorDoctorColumns && <th>Status</th>}
                 <th>Admission days</th><th>Payment</th><th>Actions</th>
               </tr>
-              {filteredPatients.map((p) => (
-                <tr key={p._id}>
-                  <td>{p.id}</td>
-                  <td><NameLink id={p._id}>{p.name}</NameLink></td>
-                  <td>{p.gender}</td>
-                  <td>{p.phone}</td>
-                  <td>{p.type}</td>
-                  <td>{p.admitted ? (p.admissionDays != null ? `${p.admissionDays} day(s)` : '—') : '—'}</td>
-                  <td><PayBadge status={patientPayStatus(bills, p._id)} /></td>
-                  <td>
-                    {isFrontDesk ? (
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button className="btn btn-sm" onClick={() => setPopup({ type: 'appointments', patientId: p._id })}>Appointments</button>
-                        <button className="btn btn-sm" onClick={() => setPopup({ type: 'book', patientId: p._id })}>Book appointment</button>
-                        <button className="btn btn-sm btn-accent" onClick={() => setPopup({ type: 'payment', patientId: p._id })}>Make Payment</button>
-                      </div>
-                    ) : (
-                      <>
-                        <button className="btn btn-sm" onClick={() => openPatient(p._id)}>View</button>{' '}
-                        <button className="btn btn-sm" onClick={() => showToast('Opens edit form')}>Edit</button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {filteredPatients.map((p) => {
+                const statusInfo = getConsultationStatus(p);
+                const consultationDate = Array.isArray(p.consultations) && p.consultations.length > 0
+                  ? new Date(p.consultations[0].createdAt || p.lastVisit || Date.now()).toLocaleDateString()
+                  : p.lastVisit || '—';
+
+                return (
+                  <tr key={p._id}>
+                    <td>{p.id}</td>
+                    <td><NameLink id={p._id}>{p.name}</NameLink></td>
+                    <td>{p.gender}</td>
+                    <td>{p.phone}</td>
+                    <td>{p.type}</td>
+                    {showSeniorDoctorColumns && <td>{consultationDate}</td>}
+                    {showSeniorDoctorColumns && <td><Badge status={statusInfo.status} /></td>}
+                    <td>{p.admitted ? (p.admissionDays != null ? `${p.admissionDays} day(s)` : '—') : '—'}</td>
+                    <td><PayBadge status={patientPayStatus(bills, p._id)} /></td>
+                    <td>
+                      {isFrontDesk ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button className="btn btn-sm" onClick={() => setPopup({ type: 'appointments', patientId: p._id })}>Appointments</button>
+                          <button className="btn btn-sm" onClick={() => setPopup({ type: 'book', patientId: p._id })}>Book appointment</button>
+                          <button className="btn btn-sm btn-accent" onClick={() => setPopup({ type: 'payment', patientId: p._id })}>Make Payment</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button className="btn btn-sm" onClick={() => openPatient(p._id)}>View</button>{' '}
+                          <button className="btn btn-sm" onClick={() => showToast('Opens edit form')}>Edit</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

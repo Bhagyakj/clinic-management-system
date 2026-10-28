@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
+import Appointment from '../../../server/models/Appointment.js';
 import {
   getVisibleDoctorIdsForUser,
   normalizeAppointmentDateKey,
@@ -37,6 +39,20 @@ test('senior doctor sees only their own appointment list', () => {
   assert.deepEqual(visible, ['doc-senior-a']);
 });
 
+test('junior doctor matches doctor records when userId is a Mongo ObjectId', () => {
+  const userId = new mongoose.Types.ObjectId().toString();
+  const doctorId = 'doc-junior-objectid';
+  const visible = getVisibleDoctorIdsForUser({
+    role: 'jdoc',
+    userId,
+    userName: 'Dr. Arjun Rao',
+    reportingDoctorId: null,
+    doctors: [{ _id: doctorId, userId: new mongoose.Types.ObjectId(userId), name: 'Dr. Arjun Rao' }],
+  });
+
+  assert.deepEqual(visible, [doctorId]);
+});
+
 test('appointment filters match selected status and local date without timezone drift', () => {
   assert.equal(normalizeAppointmentDateKey('2025-03-21T00:00:00.000Z'), '2025-03-21');
   assert.equal(normalizeAppointmentTimeKey('09:00 AM'), '09:00');
@@ -47,12 +63,12 @@ test('appointment filters match selected status and local date without timezone 
     doctorId: 'doc-senior-a',
     date: '2025-03-21T00:00:00.000Z',
     time: '09:00 AM',
-    status: 'confirmed',
+    status: 'new',
     patientId: 'p-1',
   };
 
   assert.equal(
-    appointmentMatchesFilters(appointment, { selectedDoctorId: 'all', selectedStatus: 'confirmed', selectedDate: '2025-03-21' }),
+    appointmentMatchesFilters(appointment, { selectedDoctorId: 'all', selectedStatus: 'new', selectedDate: '2025-03-21' }),
     true,
   );
   assert.equal(
@@ -63,4 +79,16 @@ test('appointment filters match selected status and local date without timezone 
     normalizeAppointmentTimeKey('09:00 AM') === normalizeAppointmentTimeKey('9:00am'),
     true,
   );
+});
+
+test('new appointment status is supported by the appointment model', () => {
+  const appointment = new Appointment({
+    patientId: '64d8f0d3e4aabcd123456789',
+    doctorId: '64d8f0d3e4aabcd123456788',
+    date: '2025-03-21T00:00:00.000Z',
+    time: '09:00 AM',
+  });
+
+  assert.equal(appointment.status, 'new');
+  assert.ok(Appointment.schema.path('status').enumValues.includes('new'));
 });

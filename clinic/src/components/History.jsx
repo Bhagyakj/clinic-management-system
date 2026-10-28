@@ -76,10 +76,30 @@ function renderHistorySections(patient) {
                   ))}
                 </ul>
               )}
+              {Array.isArray(patient.procedures) && patient.procedures.length > 0 && (
+                <ul style={{ margin: '8px 0 0 16px' }}>
+                  {patient.procedures.map((procedure, procedureIdx) => (
+                    <li key={`history-procedure-${procedureIdx}`}>
+                      {procedure?.name || 'Procedure'} — {procedure?.instructions || 'No instructions'}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))
         ) : (
-          <div style={{ color: 'var(--muted)' }}>No prescription history available.</div>
+          Array.isArray(patient.procedures) && patient.procedures.length > 0 ? (
+            <div style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 12 }}>
+              <strong>Procedures</strong>
+              <ul style={{ margin: '8px 0 0 16px' }}>
+                {patient.procedures.map((procedure, idx) => (
+                  <li key={`procedure-only-${idx}`}>{procedure?.name || 'Procedure'} — {procedure?.instructions || 'No instructions'}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div style={{ color: 'var(--muted)' }}>No prescription history available.</div>
+          )
         )}
       </div>
     </div>

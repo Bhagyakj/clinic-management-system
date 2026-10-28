@@ -37,13 +37,13 @@ export const bookAppointment = async (req, res) => {
     }
 
     const appointment = await Appointment.create({
-      patientId: patient._id, doctorId, date, time, notes, status: 'confirmed',
+      patientId: patient._id, doctorId, date, time, notes, status: 'new',
     });
 
     // Your Patient schema has no `appointments` ref array — appointments are
     // recorded directly in `appointmentHistory` (matches the frontend's
     // Appointments popup, which reads date/time/doctor/status).
-    patient.appointmentHistory.push({ date: toDateString(date), time, doctor: doctor.name, status: 'confirmed' });
+    patient.appointmentHistory.push({ date: toDateString(date), time, doctor: doctor.name, status: 'new' });
     patient.lastVisit = toDateString(date);
     patient.doctor = doctor.name;
     await patient.save();

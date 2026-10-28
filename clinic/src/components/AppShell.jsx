@@ -17,6 +17,9 @@ import Users from './Users.jsx';
 import Medicines from './Medicines.jsx';
 import Procedures from './Procedures.jsx';
 import Rooms from './Rooms.jsx';
+import Pharmacy from './Pharmacy.jsx';
+import NurseCharges from './NurseCharges.jsx';
+import IPPatients from './IPPatients.jsx';
 
 export default function AppShell() {
   const { role, currentRole, activeNav, navigate, logout } = useApp();
@@ -73,6 +76,10 @@ function PageRouter({ navKey }) {
     case 'medicines': return <Medicines />;
     case 'procedures': return <Procedures />;
     case 'rooms': return <Rooms />;
+    case 'prescriptions': return <Pharmacy pageKey="prescriptions" />;
+    case 'pharmbills': return <Pharmacy pageKey="pharmbills" />;
+    case 'nurse-charges': return <NurseCharges />;
+    case 'ip': return <IPPatients />;
     case 'dashboard': return <Dashboard />;
     default:
       return (

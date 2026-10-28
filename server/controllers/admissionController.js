@@ -78,7 +78,25 @@ export const dischargePatient = async (req, res) => {
       });
     }
 
+    let nurseChargeBill = null;
     if (patient) {
+      const pendingCharges = Array.isArray(patient.nurseCharges) ? patient.nurseCharges : [];
+      if (pendingCharges.length > 0) {
+        const nurseTotal = pendingCharges.reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+        nurseChargeBill = await Payment.create({
+          patientId: admission.patientId,
+          purpose: pendingCharges.map((charge) => ({
+            description: `[Nurse] ${charge.category}: ${charge.description}`,
+            amount: Number(charge.amount || 0),
+            paid: 0,
+          })),
+          totalAmount: nurseTotal,
+          paidAmount: 0,
+          status: 'pending',
+        });
+        patient.nurseCharges = [];
+      }
+
       patient.admitted = false;
       patient.admissionDays = nights;
       patient.room = null;
@@ -86,7 +104,7 @@ export const dischargePatient = async (req, res) => {
       await patient.save();
     }
 
-    res.json({ admission, bill, nights });
+    res.json({ admission, bill, nurseChargeBill, nights });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

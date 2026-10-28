@@ -1,21 +1,31 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../AppContext.jsx';
+import { normalizePrescriptionMeds } from '../utils/prescriptionUtils.js';
 
 export default function Prescription() {
-  const { navigate, savePrescription, patients, consultationPatientId, userName } = useApp();
+  const { navigate, savePrescription, patients, consultationPatientId, userName, medicines, procedures } = useApp();
   const patient = useMemo(() => {
     if (consultationPatientId) return patients.find((p) => p._id === consultationPatientId) || patients[0] || null;
     return patients[0] || null;
   }, [consultationPatientId, patients]);
 
+  const availableMedicines = useMemo(
+    () => (Array.isArray(medicines) ? medicines.filter((m) => String(m?.status || 'Active') === 'Active') : []),
+    [medicines],
+  );
+  const availableProcedures = useMemo(
+    () => (Array.isArray(procedures) ? procedures.filter((p) => String(p?.status || 'Active') === 'Active') : []),
+    [procedures],
+  );
+
   const [meds, setMeds] = useState([{ name: '', dosage: '' }]);
-  const [procedures, setProcedures] = useState([{ name: '', instructions: '' }]);
+  const [procedureRows, setProcedureRows] = useState([{ name: '', instructions: '' }]);
   const [notes, setNotes] = useState('');
 
   const addMedicineRow = () => setMeds((m) => [...m, { name: '', dosage: '' }]);
   const updateMedicineRow = (i, field, value) => setMeds((m) => m.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
-  const addProcedureRow = () => setProcedures((p) => [...p, { name: '', instructions: '' }]);
-  const updateProcedureRow = (i, field, value) => setProcedures((p) => p.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  const addProcedureRow = () => setProcedureRows((p) => [...p, { name: '', instructions: '' }]);
+  const updateProcedureRow = (i, field, value) => setProcedureRows((p) => p.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
 
   if (!patient) {
     return (
@@ -26,13 +36,15 @@ export default function Prescription() {
   }
 
   const save = async () => {
-    const result = await savePrescription({ medicines: meds, procedures, notes, doctorName: userName || 'Doctor' });
+    const result = await savePrescription({ medicines: meds, procedures: procedureRows, notes, doctorName: userName || 'Doctor' });
     if (result) {
       setMeds([{ name: '', dosage: '' }]);
-      setProcedures([{ name: '', instructions: '' }]);
+      setProcedureRows([{ name: '', instructions: '' }]);
       setNotes('');
     }
   };
+
+  const normalizedMeds = normalizePrescriptionMeds(meds);
 
   return (
     <>
@@ -45,7 +57,14 @@ export default function Prescription() {
           {meds.map((row, i) => (
             <div className="form-grid" style={{ marginBottom: 8 }} key={i}>
               <div className="field" style={{ marginBottom: 0 }}>
-                <input type="text" value={row.name} placeholder="Medicine name" onChange={(e) => updateMedicineRow(i, 'name', e.target.value)} />
+                <select value={row.name} onChange={(e) => updateMedicineRow(i, 'name', e.target.value)}>
+                  <option value="">Select medicine</option>
+                  {availableMedicines.map((medicine) => (
+                    <option key={medicine._id || medicine.id} value={medicine.name}>
+                      {medicine.name}{medicine.scientificName ? ` — ${medicine.scientificName}` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
                 <input type="text" value={row.dosage} placeholder="Dosage e.g. 1-0-1" onChange={(e) => updateMedicineRow(i, 'dosage', e.target.value)} />
@@ -55,10 +74,17 @@ export default function Prescription() {
           <button className="btn btn-sm" style={{ marginTop: 6 }} onClick={addMedicineRow}>+ Add medicine</button>
 
           <h3 style={{ marginTop: 22 }}>Procedures</h3>
-          {procedures.map((row, i) => (
+          {procedureRows.map((row, i) => (
             <div className="form-grid" style={{ marginBottom: 8 }} key={i}>
               <div className="field" style={{ marginBottom: 0 }}>
-                <input type="text" value={row.name} placeholder="Procedure name" onChange={(e) => updateProcedureRow(i, 'name', e.target.value)} />
+                <select value={row.name} onChange={(e) => updateProcedureRow(i, 'name', e.target.value)}>
+                  <option value="">Select procedure</option>
+                  {availableProcedures.map((procedure) => (
+                    <option key={procedure._id || procedure.id} value={procedure.name}>
+                      {procedure.name}{procedure.description ? ` — ${procedure.description}` : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
                 <input type="text" value={row.instructions} placeholder="Instructions" onChange={(e) => updateProcedureRow(i, 'instructions', e.target.value)} />
@@ -86,7 +112,9 @@ export default function Prescription() {
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <button className="btn" onClick={() => navigate('dashboard')}>Cancel</button>
-            <button className="btn btn-accent" onClick={save}>Save prescription</button>
+            <button className="btn btn-accent" onClick={save} disabled={normalizedMeds.length === 0 && !notes && procedureRows.every((row) => !row.name && !row.instructions)}>
+              Save prescription
+            </button>
           </div>
         </div>
       </div>

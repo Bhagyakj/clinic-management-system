@@ -1,4 +1,5 @@
 import Patient from "../models/Patient.js";
+import Payment from "../models/Payment.js";
 
 const buildPatientPayload = (body) => {
   const createdAt = new Date().toISOString().slice(0, 10);
@@ -22,6 +23,7 @@ const buildPatientPayload = (body) => {
     },
     consultations: Array.isArray(body.consultations) ? body.consultations : [],
     prescriptions: Array.isArray(body.prescriptions) ? body.prescriptions : [],
+    nurseCharges: Array.isArray(body.nurseCharges) ? body.nurseCharges : [],
     procedures: Array.isArray(body.procedures) ? body.procedures : [],
     admitted: Boolean(body.admitted),
     admissionDays: body.admissionDays ?? null,
@@ -171,6 +173,65 @@ export const updatePatient = async (req, res) => {
       { new: true },
     );
     res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const addNurseCharge = async (req, res) => {
+  try {
+    const patient = await Patient.findOne({ id: req.params.id });
+    if (!patient) return res.status(404).json({ message: 'Patient not found' });
+
+    const { description, amount, category = 'Medicine', note = '' } = req.body || {};
+    const charge = {
+      createdAt: new Date(),
+      createdBy: req.user?.role === 'Nurse' ? req.user?.name || 'Nurse' : 'Nurse',
+      category: String(category || 'Medicine').trim() || 'Medicine',
+      description: String(description || '').trim(),
+      amount: Number(amount) || 0,
+      note: String(note || '').trim(),
+    };
+
+    if (!charge.description || charge.amount <= 0) {
+      return res.status(400).json({ message: 'Charge description and amount are required.' });
+    }
+
+    patient.nurseCharges = Array.isArray(patient.nurseCharges) ? patient.nurseCharges : [];
+    patient.nurseCharges.unshift(charge);
+    await patient.save();
+
+    res.status(201).json(charge);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const convertPendingNurseCharges = async (req, res) => {
+  try {
+    const patient = await Patient.findOne({ id: req.params.id });
+    if (!patient) return res.status(404).json({ message: 'Patient not found' });
+
+    const charges = Array.isArray(patient.nurseCharges) ? patient.nurseCharges : [];
+    if (!charges.length) return res.status(400).json({ message: 'No pending nurse charges to convert.' });
+
+    const totalAmount = charges.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const bill = await Payment.create({
+      patientId: patient._id,
+      purpose: charges.map((item) => ({
+        description: `[Nurse] ${item.category}: ${item.description}`,
+        amount: Number(item.amount || 0),
+        paid: 0,
+      })),
+      totalAmount,
+      paidAmount: 0,
+      status: 'pending',
+    });
+
+    patient.nurseCharges = [];
+    await patient.save();
+
+    res.status(201).json({ bill, clearedChargeCount: charges.length, totalAmount });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

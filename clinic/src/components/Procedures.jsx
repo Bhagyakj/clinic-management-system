@@ -42,22 +42,25 @@ export default function Procedures() {
         <table>
           <tbody>
             <tr><th>ID</th><th>Name</th><th>Description</th><th>Unit cost</th><th>Status</th>{canEdit && <th></th>}</tr>
-            {procedures.map((p) => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td style={{ fontWeight: 600 }}>{p.name}</td>
-                <td>{p.description}</td>
-                <td>
-                  {canEdit
-                    ? <input type="number" defaultValue={p.unitCost} style={{ width: 90, padding: '5px 8px' }} onBlur={(e) => updateProcedure(p.id, { unitCost: Number(e.target.value) })} />
-                    : `₹${p.unitCost}`}
-                </td>
-                <td><span className={`badge ${p.status === 'Active' ? 'stable' : 'pending'}`}>{p.status}</span></td>
-                {canEdit && (
-                  <td><button className="btn btn-sm" onClick={() => toggleProcedureStatus(p.id)}>{p.status === 'Active' ? 'Archive' : 'Reactivate'}</button></td>
-                )}
-              </tr>
-            ))}
+            {procedures.map((p) => {
+              const procedureId = p._id || p.id;
+              return (
+                <tr key={procedureId}>
+                  <td>{p.id || p._id?.slice(-6) || '—'}</td>
+                  <td style={{ fontWeight: 600 }}>{p.name}</td>
+                  <td>{p.description}</td>
+                  <td>
+                    {canEdit
+                      ? <input type="number" defaultValue={p.unitCost} style={{ width: 90, padding: '5px 8px' }} onBlur={(e) => updateProcedure(procedureId, { unitCost: Number(e.target.value) })} />
+                      : `₹${p.unitCost}`}
+                  </td>
+                  <td><span className={`badge ${p.status === 'Active' ? 'stable' : 'pending'}`}>{p.status}</span></td>
+                  {canEdit && (
+                    <td><button className="btn btn-sm" onClick={() => toggleProcedureStatus(procedureId)}>{p.status === 'Active' ? 'Archive' : 'Reactivate'}</button></td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

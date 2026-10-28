@@ -1,7 +1,13 @@
 export function normalizeDoctorUserId(value) {
   if (!value) return '';
   if (typeof value === 'string') return value;
-  if (typeof value === 'object') return value._id || value.userId || '';
+  if (typeof value === 'object') {
+    if (value._id) return String(value._id);
+    if (value.userId) return String(value.userId);
+    if (value.id) return String(value.id);
+    if (value.constructor && value.constructor.name === 'ObjectId') return value.toString();
+    return '';
+  }
   return '';
 }
 

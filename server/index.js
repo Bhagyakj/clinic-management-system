@@ -10,6 +10,8 @@ import appointmentRoutes from './routes/appointments.js';
 import paymentRoutes from './routes/payments.js';
 import roomRoutes from './routes/rooms.js';
 import admissionRoutes from './routes/admissions.js';
+import medicineRoutes from './routes/medicines.js';
+import procedureRoutes from './routes/procedures.js';
 
 const app = express();
 
@@ -24,6 +26,8 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/admissions', admissionRoutes);
+app.use('/api/medicines', medicineRoutes);
+app.use('/api/procedures', procedureRoutes);
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/clinic';
 const PORT = process.env.PORT || 5000;

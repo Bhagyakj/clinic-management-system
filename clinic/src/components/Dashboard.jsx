@@ -267,9 +267,8 @@ function NurseBody() {
         <div className="card">
           <h3>Quick actions</h3>
           <div className="qa-grid" style={{ gridTemplateColumns: '1fr' }}>
-            <QuickAction icon="💊" label="Record Medicine" />
-            <QuickAction icon="🧾" label="Record Procedure" />
-            <QuickAction icon="🛏️" label="View IP Patients" nav="ip" />
+            <QuickAction icon="💊" label="Record Nurse Charges" nav="nurse-charges" />
+            <QuickAction icon="🧾" label="View IP Patients" nav="ip" />
           </div>
         </div>
       </div>
@@ -278,7 +277,20 @@ function NurseBody() {
 }
 
 function PharmBody() {
-  const { patients } = useApp();
+  const { patients, openPatient } = useApp();
+
+  const getPrescriptionStatus = (patient) => {
+    const prescriptions = Array.isArray(patient?.prescriptions) ? patient.prescriptions : [];
+    if (prescriptions.length === 0) return { label: 'No Rx', className: 'badge' };
+
+    const latest = prescriptions.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))[0];
+    const createdAt = latest?.createdAt ? new Date(latest.createdAt) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) return { label: 'Active', className: 'badge stable' };
+
+    const diffDays = (Date.now() - createdAt.getTime()) / 86400000;
+    return diffDays <= 7 ? { label: 'New Rx', className: 'badge pending' } : { label: 'Active', className: 'badge stable' };
+  };
+
   return (
     <>
       <div className="stat-grid">
@@ -290,15 +302,19 @@ function PharmBody() {
           {patients.length === 0 ? <div className="popup-empty">No patients yet.</div> : (
             <table>
               <tbody>
-                <tr><th>Patient</th><th>Doctor</th><th>Last Visit</th><th></th></tr>
-                {patients.slice(0, 5).map((p) => (
-                  <tr key={p._id}>
-                    <td><NameLink id={p._id}>{p.name}</NameLink></td>
-                    <td>{p.doctor}</td>
-                    <td>{p.lastVisit || '—'}</td>
-                    <td><button className="btn btn-sm">View</button></td>
-                  </tr>
-                ))}
+                <tr><th>Patient</th><th>Doctor</th><th>Last Visit</th><th>Status</th><th></th></tr>
+                {patients.slice(0, 5).map((p) => {
+                  const status = getPrescriptionStatus(p);
+                  return (
+                    <tr key={p._id}>
+                      <td><NameLink id={p._id}>{p.name}</NameLink></td>
+                      <td>{p.doctor}</td>
+                      <td>{p.lastVisit || '—'}</td>
+                      <td><span className={status.className}>{status.label}</span></td>
+                      <td><button className="btn btn-sm" onClick={() => openPatient(p._id)}>View</button></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -306,8 +322,8 @@ function PharmBody() {
         <div className="card">
           <h3>Quick actions</h3>
           <div className="qa-grid" style={{ gridTemplateColumns: '1fr' }}>
-            <QuickAction icon="🧮" label="Prepare Pharmacy Bill" />
-            <QuickAction icon="✅" label="Mark Delivery" />
+            <QuickAction icon="🧮" label="Prepare Pharmacy Bill" nav="prescriptions" />
+            <QuickAction icon="📄" label="Open Pharmacy Bills" nav="pharmbills" />
           </div>
         </div>
       </div>

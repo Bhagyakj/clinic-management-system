@@ -7,7 +7,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 router.get('/', listPayments);
-router.post('/', requireRole('Manager', 'Front Office Staff', 'Nurse'), createBill);
+router.post('/', requireRole('Manager', 'Front Office Staff', 'Nurse', 'Pharmacist'), createBill);
 router.post('/:id/collect', requireRole('Manager', 'Front Office Staff'), collectPayment);
 
 export default router;

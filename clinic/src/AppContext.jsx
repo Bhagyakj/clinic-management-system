@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useMemo, useState, useCallback } from 'react';
 import {
   roleInfo, DESIGNATION_TO_ROLE,
-  INITIAL_USERS, INITIAL_MEDICINES, INITIAL_PROCEDURES, // still mock — no backend for these yet
+  INITIAL_USERS, INITIAL_PROCEDURES, // still mock — no backend for these yet
 } from './data.js';
 import { apiLogin, apiRegister, apiGetMe, authed } from './api.js';
+import { normalizeDoctorUserId } from './utils/doctorVisibility.js';
+import { normalizePrescriptionMeds } from './utils/prescriptionUtils.js';
 
 const AppContext = createContext(null);
 
@@ -28,9 +30,9 @@ export function AppProvider({ children }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
 
-  // Still local/mock — no backend built yet for Users (beyond auth), Medicines, Procedures
+  // Users still remain local/mock; medicines are now loaded from the database.
   const [users, setUsers] = useState(INITIAL_USERS);
-  const [medicines, setMedicines] = useState(INITIAL_MEDICINES);
+  const [medicines, setMedicines] = useState([]);
   const [procedures, setProcedures] = useState(INITIAL_PROCEDURES);
 
   // collectPayment is a per-BILL action (POST /payments/:id/collect splits
@@ -59,11 +61,12 @@ export function AppProvider({ children }) {
     setDataLoading(true);
     setDataError('');
     try {
-      const [p, d, r, pay, appt, adm] = await Promise.all([
+      const [p, d, r, pay, appt, adm, meds, procs] = await Promise.all([
         client.listPatients(), client.listDoctors(), client.listRooms(),
         client.listPayments(), client.listAppointments(), client.listAdmissions(),
+        client.listMedicines(), client.listProcedures(),
       ]);
-      setPatients(p); setDoctors(d); setRooms(r); setBills(pay); setAppointments(appt); setAdmissions(adm);
+      setPatients(p); setDoctors(d); setRooms(r); setBills(pay); setAppointments(appt); setAdmissions(adm); setMedicines(meds); setProcedures(procs.length ? procs : INITIAL_PROCEDURES);
     } catch (err) {
       setDataError(err.message);
       showToast(`Couldn't load data from the server: ${err.message}`);
@@ -299,12 +302,14 @@ export function AppProvider({ children }) {
       const result = await api.dischargePatient(admissionId, { toDate });
       setAdmissions((prev) => prev.map((a) => (a._id === admissionId ? result.admission : a)));
       if (result.bill) setBills((prev) => [result.bill, ...prev]);
+      if (result.nurseChargeBill) setBills((prev) => [result.nurseChargeBill, ...prev]);
       const [refreshedPatient, refreshedRooms] = await Promise.all([api.getPatient(patientIdCustom), api.listRooms()]);
       setPatients((prev) => prev.map((p) => (p._id === refreshedPatient._id ? refreshedPatient : p)));
       setRooms(refreshedRooms);
-      showToast(result.bill
-        ? `Discharged — ${result.nights} night(s), ₹${result.bill.totalAmount} room-rent bill issued`
-        : 'Discharged');
+      const messageParts = [];
+      if (result.bill) messageParts.push(`${result.nights} night(s) room-rent bill charged`);
+      if (result.nurseChargeBill) messageParts.push(`₹${result.nurseChargeBill.totalAmount} nurse charges issued`);
+      showToast(messageParts.length ? `Discharged — ${messageParts.join(' • ')}` : 'Discharged');
       return result;
     } catch (err) {
       showToast(`Couldn't discharge patient: ${err.message}`);
@@ -370,14 +375,27 @@ export function AppProvider({ children }) {
         history: [{ d: new Date().toISOString().slice(0, 10), t: 'Consultation', s: `${consultation.doctorName} recorded the latest patient assessment.` }, ...history],
       });
 
+      const currentDoctor = doctors.find((doctor) => {
+        const userIdMatch = String(currentUserId || '').trim() && normalizeDoctorUserId(doctor?.userId) === String(currentUserId || '').trim();
+        const safeDoctorName = String(doctor?.name || '').trim();
+        const safeUserName = String(userName || '').trim();
+        const nameMatch = !!safeUserName && (
+          safeDoctorName === safeUserName
+          || safeDoctorName === safeUserName.replace(/\s*\((?:JD|SD)\)\s*$/i, '')
+          || safeUserName.includes(safeDoctorName)
+        );
+        return userIdMatch || nameMatch;
+      });
+
       const appointmentToComplete = [...appointments]
         .filter((appointment) => {
           const samePatient = appointment.patientId && (
             String(appointment.patientId) === String(patient._id)
             || String(appointment.patientId) === String(patient.id)
           );
+          const sameDoctor = !currentDoctor || String(typeof appointment.doctorId === 'string' ? appointment.doctorId : appointment.doctorId?._id || '') === String(currentDoctor._id);
           const notCancelled = String(appointment.status || '').toLowerCase() !== 'cancelled';
-          return samePatient && notCancelled;
+          return samePatient && sameDoctor && notCancelled;
         })
         .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())[0];
 
@@ -404,7 +422,7 @@ export function AppProvider({ children }) {
       return null;
     }
 
-    const meds = Array.isArray(payload?.medicines) ? payload.medicines.filter((m) => m.name && m.dosage) : [];
+    const meds = normalizePrescriptionMeds(payload?.medicines || []);
     const procedures = Array.isArray(payload?.procedures) ? payload.procedures.filter((p) => p.name || p.instructions) : [];
     const notes = String(payload?.notes || '').trim();
 
@@ -443,6 +461,39 @@ export function AppProvider({ children }) {
     return updated;
   }, [api, consultationPatientId, patients, userName, showToast]);
 
+  const addNurseCharge = useCallback(async (patientId, form) => {
+    if (!api) return null;
+    try {
+      const charge = await api.addNurseCharge(patientId, form);
+      setPatients((prev) => prev.map((p) => {
+        if (String(p._id) !== String(patientId) && String(p.id) !== String(patientId)) return p;
+        const existing = Array.isArray(p.nurseCharges) ? p.nurseCharges : [];
+        return { ...p, nurseCharges: [charge, ...existing] };
+      }));
+      return charge;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't add nurse charge: ${err.message}` : 'Couldn\'t add nurse charge.');
+      return null;
+    }
+  }, [api, showToast]);
+
+  const convertPendingNurseCharges = useCallback(async (patientId) => {
+    if (!api) return null;
+    try {
+      const result = await api.convertPendingNurseCharges(patientId);
+      if (result?.bill) setBills((prev) => [result.bill, ...prev]);
+      setPatients((prev) => prev.map((p) => {
+        if (String(p._id) !== String(patientId) && String(p.id) !== String(patientId)) return p;
+        return { ...p, nurseCharges: [] };
+      }));
+      showToast(`Converted ${result?.clearedChargeCount || 0} pending charges into a bill.`);
+      return result;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't convert charges: ${err.message}` : 'Couldn\'t convert charges.');
+      return null;
+    }
+  }, [api, showToast]);
+
   /* ---- Manager only: user (staff) master — still local/mock ---- */
   const addUser = useCallback((form) => {
     const id = 'U-' + String(users.length + 1).padStart(3, '0');
@@ -454,49 +505,106 @@ export function AppProvider({ children }) {
   }, []);
 
   /* ---- Manager only: medicines master — still local/mock ---- */
-  const addMedicine = useCallback((form) => {
-    const id = 'M-' + String(medicines.length + 1).padStart(3, '0');
-    setMedicines((prev) => [...prev, { id, name: form.name, scientificName: form.scientificName, unitCost: Number(form.unitCost), quantity: Number(form.quantity), status: 'Active' }]);
-    showToast(`${form.name} added to medicines`);
-  }, [medicines.length, showToast]);
-  const updateMedicine = useCallback((id, patch) => {
-    setMedicines((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
-  }, []);
-  const toggleMedicineStatus = useCallback((id) => {
-    setMedicines((prev) => prev.map((m) => (m.id === id ? { ...m, status: m.status === 'Active' ? 'Archived' : 'Active' } : m)));
-  }, []);
+  const addMedicine = useCallback(async (form) => {
+    if (!api) return null;
+    try {
+      const medicine = await api.createMedicine({
+        name: String(form.name || '').trim(),
+        scientificName: String(form.scientificName || '').trim(),
+        unitCost: Number(form.unitCost) || 0,
+        quantity: Number(form.quantity) || 0,
+        status: 'Active',
+      });
+      setMedicines((prev) => [medicine, ...prev.filter((m) => String(m._id || m.id) !== String(medicine._id || medicine.id))]);
+      showToast(`${medicine.name} added to medicines`);
+      return medicine;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't add medicine: ${err.message}` : 'Couldn\'t add medicine.');
+      return null;
+    }
+  }, [api, showToast]);
+  const updateMedicine = useCallback(async (id, patch) => {
+    if (!api) return null;
+    try {
+      const medicine = await api.updateMedicine(id, patch);
+      setMedicines((prev) => prev.map((m) => (String(m._id || m.id) === String(id) ? medicine : m)));
+      return medicine;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't update medicine: ${err.message}` : 'Couldn\'t update medicine.');
+      return null;
+    }
+  }, [api, showToast]);
+  const toggleMedicineStatus = useCallback(async (id) => {
+    if (!api) return null;
+    try {
+      const medicine = await api.toggleMedicineStatus(id);
+      setMedicines((prev) => prev.map((m) => (String(m._id || m.id) === String(id) ? medicine : m)));
+      return medicine;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't toggle medicine status: ${err.message}` : 'Couldn\'t toggle medicine status.');
+      return null;
+    }
+  }, [api, showToast]);
 
-  /* ---- Manager only: procedures master — still local/mock ---- */
-  const addProcedure = useCallback((form) => {
-    const id = 'PR-' + String(procedures.length + 1).padStart(3, '0');
-    setProcedures((prev) => [...prev, { id, name: form.name, description: form.description, unitCost: Number(form.unitCost), status: 'Active' }]);
-    showToast(`${form.name} added to procedures`);
-  }, [procedures.length, showToast]);
-  const updateProcedure = useCallback((id, patch) => {
-    setProcedures((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-  }, []);
-  const toggleProcedureStatus = useCallback((id) => {
-    setProcedures((prev) => prev.map((p) => (p.id === id ? { ...p, status: p.status === 'Active' ? 'Archived' : 'Active' } : p)));
-  }, []);
+  /* ---- Manager only: procedures master ---- */
+  const addProcedure = useCallback(async (form) => {
+    if (!api) return null;
+    try {
+      const procedure = await api.createProcedure({
+        name: String(form.name || '').trim(),
+        description: String(form.description || '').trim(),
+        unitCost: Number(form.unitCost) || 0,
+        status: 'Active',
+      });
+      setProcedures((prev) => [procedure, ...prev.filter((p) => String(p._id || p.id) !== String(procedure._id || procedure.id))]);
+      showToast(`${procedure.name} added to procedures`);
+      return procedure;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't add procedure: ${err.message}` : 'Couldn\'t add procedure.');
+      return null;
+    }
+  }, [api, showToast]);
+  const updateProcedure = useCallback(async (id, patch) => {
+    if (!api) return null;
+    try {
+      const procedure = await api.updateProcedure(id, patch);
+      setProcedures((prev) => prev.map((p) => (String(p._id || p.id) === String(id) ? procedure : p)));
+      return procedure;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't update procedure: ${err.message}` : 'Couldn\'t update procedure.');
+      return null;
+    }
+  }, [api, showToast]);
+  const toggleProcedureStatus = useCallback(async (id) => {
+    if (!api) return null;
+    try {
+      const procedure = await api.toggleProcedureStatus(id);
+      setProcedures((prev) => prev.map((p) => (String(p._id || p.id) === String(id) ? procedure : p)));
+      return procedure;
+    } catch (err) {
+      showToast(err?.message ? `Couldn't toggle procedure status: ${err.message}` : 'Couldn\'t toggle procedure status.');
+      return null;
+    }
+  }, [api, showToast]);
 
   const value = useMemo(() => ({
-    screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
+    screen, role, activeNav, patients, doctors, bills, appointments, setAppointments, rooms, admissions,
     dataLoading, dataError, users, medicines, procedures,
     drawerPatientId, consultationPatientId, setConsultationPatientId, searchTerm, setSearchTerm, toastMsg, toastVisible, userName, employeeId, currentUserId, reportingDoctorId, token, authLoading,
     currentRole: role ? roleInfo(role) : null,
     login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
-    openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
+    openPatient, closeDrawer, saveConsultation, savePrescription, addNurseCharge, convertPendingNurseCharges, showToast,
     addPatient, bookAppointment, createBill, collectPayment,
     payBillId, openPayment, closePayment,
     addRoom, setRoomStatus, admitPatient, dischargePatient,
     addUser, toggleUserStatus,
     addMedicine, updateMedicine, toggleMedicineStatus,
     addProcedure, updateProcedure, toggleProcedureStatus,
-  }), [screen, role, activeNav, patients, doctors, bills, appointments, rooms, admissions,
+  }), [screen, role, activeNav, patients, doctors, bills, appointments, setAppointments, rooms, admissions,
       dataLoading, dataError, users, medicines, procedures,
       drawerPatientId, consultationPatientId, searchTerm, toastMsg, toastVisible, userName, employeeId, currentUserId, reportingDoctorId, token, authLoading,
       login, register, logout, restoreSession, goToLogin, goToRegister, navigate, loadAllData,
-      openPatient, closeDrawer, saveConsultation, savePrescription, showToast,
+      openPatient, closeDrawer, saveConsultation, savePrescription, addNurseCharge, convertPendingNurseCharges, showToast,
       addPatient, bookAppointment, createBill, collectPayment,
       payBillId, openPayment, closePayment,
       addRoom, setRoomStatus, admitPatient, dischargePatient,

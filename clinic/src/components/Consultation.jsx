@@ -5,7 +5,7 @@ import { normalizeDoctorUserId } from '../utils/doctorVisibility.js';
 const TABS = ['Vitals', 'Complaints', 'Observations', 'Diagnosis Notes'];
 
 export default function Consultation() {
-  const { role, navigate, saveConsultation, patients, consultationPatientId, userName, reportingDoctorId, doctors } = useApp();
+  const { role, navigate, saveConsultation, patients, consultationPatientId, userName, currentUserId, reportingDoctorId, doctors, appointments, setAppointments, api } = useApp();
   const [tab, setTab] = useState('Vitals');
   const isSenior = role === 'sdoc';
   const isJunior = role === 'jdoc';
@@ -33,12 +33,68 @@ export default function Consultation() {
 
   const [form, setForm] = useState(initialForm);
 
+  const getDoctorId = (appointment) => {
+    if (!appointment?.doctorId) return '';
+    if (typeof appointment.doctorId === 'string') return appointment.doctorId;
+    if (typeof appointment.doctorId === 'object') return appointment.doctorId._id || '';
+    return '';
+  };
+
+  const userNameText = String(userName || '').trim();
+  const patientDoctorText = String(patient?.doctor || '').trim();
+
+  const currentDoctor = useMemo(() => {
+    const safeUserId = String(currentUserId || '').trim();
+    const safeUserName = String(userName || '').trim();
+    return doctors.find((doctor) => {
+      const userIdMatch = safeUserId && normalizeDoctorUserId(doctor?.userId) === safeUserId;
+      const name = String(doctor?.name || '').trim();
+      const nameMatch = !!safeUserName && (
+        name === safeUserName
+        || name === safeUserName.replace(/\s*\((?:JD|SD)\)\s*$/i, '')
+        || safeUserName.includes(name)
+      );
+      return userIdMatch || nameMatch;
+    }) || null;
+  }, [currentUserId, doctors, userName]);
+
   useEffect(() => {
     setForm(initialForm);
   }, [initialForm]);
 
-  const userNameText = String(userName || '').trim();
-  const patientDoctorText = String(patient?.doctor || '').trim();
+  useEffect(() => {
+    if (!api || !patient || !currentDoctor) return;
+
+    const pendingNewAppointment = [...appointments]
+      .filter((appointment) => {
+        const samePatient = appointment.patientId && (
+          String(appointment.patientId) === String(patient._id)
+          || String(appointment.patientId) === String(patient.id)
+        );
+        const sameDoctor = String(getDoctorId(appointment)) === String(currentDoctor._id);
+        const notCancelled = String(appointment.status || '').toLowerCase() !== 'cancelled';
+        return samePatient && sameDoctor && notCancelled && String(appointment.status || '').toLowerCase() === 'new';
+      })
+      .sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime())[0];
+
+    if (!pendingNewAppointment) return;
+
+    let isMounted = true;
+    api.updateAppointmentStatus(pendingNewAppointment._id, 'confirmed')
+      .then((updatedAppointment) => {
+        if (!isMounted) return;
+        setAppointments((prev) => prev.map((appointment) => (
+          appointment._id === updatedAppointment._id ? updatedAppointment : appointment
+        )));
+      })
+      .catch((err) => {
+        console.warn('Could not confirm appointment from consultation view:', err?.message || err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [api, appointments, currentDoctor, patient, setAppointments]);
 
   const assignedSeniorName = useMemo(() => {
     if (!reportingDoctorId) return '';

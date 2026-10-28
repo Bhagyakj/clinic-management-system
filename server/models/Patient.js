@@ -52,6 +52,14 @@ const patientSchema = new mongoose.Schema({
     }],
     notes: { type: String, default: '' },
   }],
+  nurseCharges: [{
+    createdAt: { type: Date, default: Date.now },
+    createdBy: { type: String, default: 'Nurse' },
+    category: { type: String, default: 'Medicine' },
+    description: { type: String, default: '' },
+    amount: { type: Number, default: 0 },
+    note: { type: String, default: '' },
+  }],
   procedures: [{
     createdAt: { type: Date, default: Date.now },
     doctorName: { type: String, default: 'Doctor' },

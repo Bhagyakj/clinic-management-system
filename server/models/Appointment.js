@@ -10,8 +10,8 @@ const appointmentSchema = new mongoose.Schema({
   // badges (confirmed / waiting / completed / cancelled).
   status: {
     type: String,
-    enum: ['scheduled', 'confirmed', 'completed', 'cancelled'],
-    default: 'scheduled',
+    enum: ['new', 'scheduled', 'confirmed', 'completed', 'cancelled'],
+    default: 'new',
   },
 
   notes: { type: String },

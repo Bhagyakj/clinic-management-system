@@ -5,6 +5,8 @@ import User from './models/User.js';
 import Doctor from './models/Doctor.js';
 import Room from './models/Room.js';
 import Patient from './models/Patient.js';
+import Medicine from './models/Medicine.js';
+import Procedure from './models/Procedure.js';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/clinic';
 const PASSWORD = 'test1234'; // same password for every seeded account — change after testing
@@ -40,6 +42,37 @@ const PATIENTS = [
   { id: 'P-001', name: 'Anita Sharma', gender: 'Female', age: 34, phone: '9876543210' },
   { id: 'P-002', name: 'Priya Patel', gender: 'Female', age: 29, phone: '9876543211' },
   { id: 'P-003', name: 'Amit Singh', gender: 'Male', age: 41, phone: '9876543212' },
+];
+
+const MEDICINES = [
+  { name: 'Paracetamol 500mg', scientificName: 'Acetaminophen', unitCost: 4, quantity: 320 },
+  { name: 'Amoxicillin 250mg', scientificName: 'Amoxicillin', unitCost: 8, quantity: 150 },
+  { name: 'Cetirizine 10mg', scientificName: 'Cetirizine HCl', unitCost: 3, quantity: 200 },
+  { name: 'Ibuprofen 400mg', scientificName: 'Ibuprofen', unitCost: 6, quantity: 180 },
+  { name: 'Amlodipine 5mg', scientificName: 'Amlodipine', unitCost: 10, quantity: 90 },
+  { name: 'Omeprazole 20mg', scientificName: 'Omeprazole', unitCost: 7, quantity: 140 },
+  { name: 'Metformin 500mg', scientificName: 'Metformin', unitCost: 9, quantity: 120 },
+  { name: 'Azithromycin 250mg', scientificName: 'Azithromycin', unitCost: 12, quantity: 110 },
+  { name: 'Dolo 650', scientificName: 'Paracetamol', unitCost: 5, quantity: 260 },
+  { name: 'Cough Syrup', scientificName: 'Dextromethorphan', unitCost: 18, quantity: 80 },
+  { name: 'Vitamin C 500mg', scientificName: 'Ascorbic Acid', unitCost: 6, quantity: 190 },
+  { name: 'Levothyroxine 25mcg', scientificName: 'Levothyroxine Sodium', unitCost: 15, quantity: 65 },
+  { name: 'Salbutamol Inhaler', scientificName: 'Albuterol', unitCost: 35, quantity: 50 },
+  { name: 'Hydrocortisone Cream', scientificName: 'Hydrocortisone', unitCost: 22, quantity: 70 },
+  { name: 'Oral Rehydration Solution', scientificName: 'ORS', unitCost: 11, quantity: 150 },
+];
+
+const PROCEDURES = [
+  { name: 'Blood Test — CBC', description: 'Complete blood count', unitCost: 350 },
+  { name: 'ECG', description: 'Electrocardiogram', unitCost: 500 },
+  { name: 'X-Ray — Chest', description: 'Single view chest x-ray', unitCost: 600 },
+  { name: 'Urine Routine', description: 'Routine urine analysis', unitCost: 220 },
+  { name: 'MRI — Brain', description: 'Magnetic resonance imaging scan', unitCost: 4200 },
+  { name: 'CT Scan — Abdomen', description: 'Abdominal CT imaging', unitCost: 3600 },
+  { name: 'Physiotherapy Session', description: 'Mobility and rehab session', unitCost: 800 },
+  { name: 'Wound Dressing', description: 'Sterile dressing and care', unitCost: 300 },
+  { name: 'Nebulization', description: 'Respiratory nebulizer treatment', unitCost: 450 },
+  { name: 'Vaccination', description: 'Routine immunization dosage', unitCost: 550 },
 ];
 
 async function run() {
@@ -91,6 +124,28 @@ async function run() {
       console.log('Created room', r.roomNumber);
     } else {
       console.log('Room already exists', r.roomNumber);
+    }
+  }
+
+  // Sample medicines
+  for (const medicine of MEDICINES) {
+    const existing = await Medicine.findOne({ name: medicine.name });
+    if (!existing) {
+      await Medicine.create({ ...medicine, status: 'Active' });
+      console.log('Created medicine', medicine.name);
+    } else {
+      console.log('Medicine already exists', medicine.name);
+    }
+  }
+
+  // Procedure catalog
+  for (const procedure of PROCEDURES) {
+    const existing = await Procedure.findOne({ name: procedure.name });
+    if (!existing) {
+      await Procedure.create({ ...procedure, status: 'Active' });
+      console.log('Created procedure', procedure.name);
+    } else {
+      console.log('Procedure already exists', procedure.name);
     }
   }
 

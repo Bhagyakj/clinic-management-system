@@ -43,27 +43,30 @@ export default function Medicines() {
         <table>
           <tbody>
             <tr><th>ID</th><th>Name</th><th>Scientific name</th><th>Unit cost</th><th>Quantity</th><th>Status</th>{canEdit && <th></th>}</tr>
-            {medicines.map((m) => (
-              <tr key={m.id}>
-                <td>{m.id}</td>
-                <td style={{ fontWeight: 600 }}>{m.name}</td>
-                <td>{m.scientificName}</td>
-                <td>
-                  {canEdit
-                    ? <input type="number" defaultValue={m.unitCost} style={{ width: 80, padding: '5px 8px' }} onBlur={(e) => updateMedicine(m.id, { unitCost: Number(e.target.value) })} />
-                    : `₹${m.unitCost}`}
-                </td>
-                <td>
-                  {canEdit
-                    ? <input type="number" defaultValue={m.quantity} style={{ width: 90, padding: '5px 8px' }} onBlur={(e) => updateMedicine(m.id, { quantity: Number(e.target.value) })} />
-                    : m.quantity}
-                </td>
-                <td><span className={`badge ${m.status === 'Active' ? 'stable' : 'pending'}`}>{m.status}</span></td>
-                {canEdit && (
-                  <td><button className="btn btn-sm" onClick={() => toggleMedicineStatus(m.id)}>{m.status === 'Active' ? 'Archive' : 'Reactivate'}</button></td>
-                )}
-              </tr>
-            ))}
+            {medicines.map((m) => {
+              const medicineId = m._id || m.id;
+              return (
+                <tr key={medicineId}>
+                  <td>{m.id || String(m._id || '').slice(-6).toUpperCase()}</td>
+                  <td style={{ fontWeight: 600 }}>{m.name}</td>
+                  <td>{m.scientificName}</td>
+                  <td>
+                    {canEdit
+                      ? <input type="number" defaultValue={m.unitCost} style={{ width: 80, padding: '5px 8px' }} onBlur={(e) => updateMedicine(medicineId, { unitCost: Number(e.target.value) })} />
+                      : `₹${m.unitCost}`}
+                  </td>
+                  <td>
+                    {canEdit
+                      ? <input type="number" defaultValue={m.quantity} style={{ width: 90, padding: '5px 8px' }} onBlur={(e) => updateMedicine(medicineId, { quantity: Number(e.target.value) })} />
+                      : m.quantity}
+                  </td>
+                  <td><span className={`badge ${m.status === 'Active' ? 'stable' : 'pending'}`}>{m.status}</span></td>
+                  {canEdit && (
+                    <td><button className="btn btn-sm" onClick={() => toggleMedicineStatus(medicineId)}>{m.status === 'Active' ? 'Archive' : 'Reactivate'}</button></td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
